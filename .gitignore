@@ -2,3 +2,5 @@
 MAlonzo/**
 
 output/
+
+src/funcs/__pycache__/

@@ -74,6 +74,9 @@ def read_candidate_set(outpath):
         return pars
 
     par_samples = rescale_parameters(outpath, pars)
+    # breakpoint()
+    par_samples['drf'] = par_samples['drf'] / 100
+    par_samples['drp'] = par_samples['drp'] / 100
     par_samples.drop(columns=['lcf'], inplace=True)
 
     return pars, obs
@@ -81,7 +84,10 @@ def read_candidate_set(outpath):
 
 outpath = '../output/work_run_0520/'
 par_samples, obs_samples = read_candidate_set(outpath)
-year = 2009
+global year
+year = 2018
+if not os.path.exists(f'year_{year}/'):
+    os.mkdir(f'year_{year}/')
 par_samples[f'din_{year}'] = obs_samples[f'din_{year}'].values
 
 def calculate_objectives(vars, pars_obs = par_samples):
@@ -174,7 +180,7 @@ def convergence_study(kernel, function, sampler,
              
             if sample_step >=1:
                 # Compute error
-                gp_load = pickle.load(open(f'gp_{np.mod(sample_step - 1, 2)}.pkl', "rb"))
+                gp_load = pickle.load(open(f'year_{year}/gp_{np.mod(sample_step - 1, 2)}_{year}.pkl', "rb"))
                 validation_sub = sampler.training_samples[:, num_samples[sample_step - 1]:num_samples[sample_step]]
                 pred_values = gp_load(validation_sub, return_cov=False).squeeze()
                 values_sub = gp(validation_sub, return_cov=False).squeeze()
@@ -187,7 +193,7 @@ def convergence_study(kernel, function, sampler,
                 errors[sample_step -1] = error_gp_comp
                 nsamples[sample_step - 1] = num_samples[sample_step -1]
 
-            pickle.dump(gp, open(f'gp_{np.mod(sample_step, 2)}.pkl', "wb"))
+            pickle.dump(gp, open(f'year_{year}/gp_{np.mod(sample_step, 2)}_{year}.pkl', "wb"))
             sample_step += 1            
 
         if flag > 0:
@@ -201,13 +207,13 @@ def convergence_study(kernel, function, sampler,
     return errors, nsamples
 
 
-def unnormalized_posterior(gp, prior_pdf, samples, year, temper_param=1):
+def unnormalized_posterior(gp, prior_pdf, samples, temper_param=1):
     prior_vals = prior_pdf(samples).squeeze()
     gp_vals = gp.predict(samples.T).squeeze()
     # calculate the difference between gp values and the true model outputs
     true_meas = [52093.389, 99477.940, 44063.700, 57936.470, 
         53449.050, 21858.007, 38560.992, 51843.258, 14176.304]
-    error_diff = np.square(gp_vals - true_meas[year - 2009])
+    error_diff = np.square(gp_vals - true_meas[int(year - 2009)])
     unnormalized_posterior_vals = prior_vals*np.exp(-error_diff)**temper_param
     return unnormalized_posterior_vals
 
@@ -300,7 +306,6 @@ def bayesian_inference_example():
     param_file = file_settings()[-1]
 
     outpath = '../output/work_run_0520/'
-    year = 2009
     par_samples, obs_samples = read_candidate_set(outpath)
     par_samples[f'din_{year}'] = obs_samples[f'din_{year}'].values
     
@@ -311,7 +316,7 @@ def bayesian_inference_example():
     init_scale = 0.5# used to define length_scale for the kernel
     num_vars = variables.nvars
     num_candidate_samples = 20000
-    num_new_samples = np.asarray([20]+[10]*10+[25]*8+[50]*8)
+    num_new_samples = np.asarray([20]+[10]*10+[25]*8+[50]*10)
 
 
     prior_pdf = partial(tensor_product_pdf, 
@@ -328,9 +333,9 @@ def bayesian_inference_example():
 
     # defining kernel
     length_scale = [init_scale, init_scale, *(3*np.ones(num_vars -2, dtype=float))]
-    kernel = RBF(length_scale, [(5e-2, 3), (5e-2, 3), (5e-2, 10), (5e-2, 5),
-        (5e-2, 10), (5e-2, 5), (5e-2, 10), (5e-2, 5), (5e-2, 10), 
-        (5e-2, 5), (5e-2, 10), (5e-2, 5), (5e-2, 10)])
+    kernel = RBF(length_scale, [(5e-2, 3), (5e-2, 3), (5e-2, 20), (5e-2, 15),
+        (5e-2, 20), (5e-2, 15), (5e-2, 20), (5e-2, 15), (5e-2, 20), 
+        (5e-2, 15), (5e-2, 20), (5e-2, 15), (5e-2, 20)])
 
     # this is the one Qian should use. The others are for comparision only
     adaptive_cholesky_sampler = BayesianInferenceCholeskySampler(
@@ -369,7 +374,7 @@ def bayesian_inference_example():
             num_new_samples, update_kernel_scale_num_samples, callback=callback,
             return_samples=True, candidate_set=par_samples.values[:, :-1].T)
 
-        np.savez(filename, nsamples=nsamples, errors=errors,
+        np.savez(f'year_{year}/{filename}', nsamples=nsamples, errors=errors,
                  cond_nums=np.asarray(cond_nums), samples=samples,
                  temper_params=np.asarray(temper_params))
 
@@ -379,7 +384,7 @@ def bayesian_inference_example():
     for method, label, ls, fixed_scale in zip(
             methods, labels, styles, fixed_scales):
         filename = get_filename(method, fixed_scale)
-        data = np.load(filename)
+        data = np.load(f'year_{year}/{filename}')
         nsamples, errors = data['nsamples'][:-1], data['errors'][:-1]
         temper_params, cond_nums = data['temper_params'][1:-1], data['cond_nums'][:-1]
         axs[0].loglog(nsamples, errors, ls=ls, label=label)
@@ -402,7 +407,7 @@ def bayesian_inference_example():
 
     figname = 'bayes_example_comparison_%d.pdf' % num_vars
     axs[0].legend()
-    plt.savefig(figname) 
+    plt.savefig(f'year_{year}/{figname}') 
 
 if __name__ == '__main__':
     try:

@@ -80,9 +80,8 @@ def read_candidate_set(outpath, num_files):
     true_meas = [52093.389, 99477.940, 44063.700, 57936.470, 
         53449.050, 21858.007, 38560.992, 51843.258, 14176.304]
     obs.reset_index(inplace=True)
-    # obs['din_sse'] = 0
     for ii in range(obs.shape[0]):
-        obs[ii, 'din_sse'] = obs.loc[ii, 'din_sse'] = (4.36e-05**2)*sp.objectivefunctions.mse(true_meas, obs.loc[:, 'din_2009':'din_2017'].values[ii])
+        obs.loc[ii, 'din_mse'] = (4.36e-05**2)*sp.objectivefunctions.mse(true_meas, obs.loc[:, 'din_2009':'din_2017'].values[ii])
 
     return pars, obs
     # END read_candidate_set()
@@ -90,7 +89,7 @@ def read_candidate_set(outpath, num_files):
 outpath = '../output/work_run_0520/'
 global year
 global num_files
-year = 'sse'
+year = 'mse'
 num_files = 12
 par_samples, obs_samples = read_candidate_set(outpath, num_files=12)
 if not os.path.exists(f'year_{year}/'):
@@ -223,6 +222,7 @@ def unnormalized_posterior(gp, prior_pdf, samples, temper_param=1):
     if isinstance(year, int):
         error_diff = np.square(gp_vals - true_meas[int(year - 2009)])
     else:
+
         error_diff = np.abs(gp_vals)
     unnormalized_posterior_vals = prior_vals*np.exp(-error_diff)**temper_param
     return unnormalized_posterior_vals
@@ -419,11 +419,11 @@ def bayesian_inference_example():
     axs[0].legend()
     plt.savefig(f'year_{year}/{figname}') 
 
-if __name__ == '__main__':
-    try:
-        import sklearn
-    except:
-        msg = 'Install sklearn using pip install sklearn'
-        raise Exception(msg)
+# if __name__ == '__main__':
+#     try:
+#         import sklearn
+#     except:
+#         msg = 'Install sklearn using pip install sklearn'
+#         raise Exception(msg)
 
-    bayesian_inference_example()
+#     bayesian_inference_example()

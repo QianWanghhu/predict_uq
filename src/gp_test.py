@@ -4,7 +4,6 @@ import numpy as np
 import os
 import matplotlib.pyplot as plt
 from functools import partial
-import time
 import copy
 import pandas as pd
 import pickle
@@ -49,16 +48,16 @@ mpl.rcParams['text.latex.preamble'] = \
     r'\usepackage{siunitx}\usepackage{amsmath}\usepackage{amssymb}'
 
 
-def read_candidate_set(outpath):
-    for n in range(12):
-        par_temp = pd.read_csv(f'{outpath}126001A.{n}.par.csv', index_col = 'real_name')
-        obs_temp = pd.read_csv(f'{outpath}126001A.{n}.obs.csv', index_col = 'real_name')
+def read_candidate_set(outpath, num_files):
+    for n in range(num_files):
+        par_temp = pd.read_csv(f'{outpath}126001A.{n}.par.csv', index_col = 'real_name', skiprows=[100])
+        obs_temp = pd.read_csv(f'{outpath}126001A.{n}.obs.csv', index_col = 'real_name', skiprows=[100])
         try:
             pars = pd.concat([pars, par_temp])
             obs = pd.concat([obs, obs_temp])
         except NameError:
-            pars = pd.read_csv(f'{outpath}126001A.{n}.par.csv', index_col = 'real_name')
-            obs = pd.read_csv(f'{outpath}126001A.{n}.obs.csv', index_col = 'real_name')
+            pars = pd.read_csv(f'{outpath}126001A.{n}.par.csv', index_col = 'real_name', skiprows=[100])
+            obs = pd.read_csv(f'{outpath}126001A.{n}.obs.csv', index_col = 'real_name', skiprows=[100])
             
 
     def rescale_parameters(outpath, pars):
@@ -78,14 +77,22 @@ def read_candidate_set(outpath):
     par_samples['drf'] = par_samples['drf'] / 100
     par_samples['drp'] = par_samples['drp'] / 100
     par_samples.drop(columns=['lcf'], inplace=True)
+    true_meas = [52093.389, 99477.940, 44063.700, 57936.470, 
+        53449.050, 21858.007, 38560.992, 51843.258, 14176.304]
+    obs.reset_index(inplace=True)
+    # obs['din_sse'] = 0
+    for ii in range(obs.shape[0]):
+        obs[ii, 'din_sse'] = obs.loc[ii, 'din_sse'] = (4.36e-05**2)*sp.objectivefunctions.mse(true_meas, obs.loc[:, 'din_2009':'din_2017'].values[ii])
 
     return pars, obs
     # END read_candidate_set()
 
 outpath = '../output/work_run_0520/'
-par_samples, obs_samples = read_candidate_set(outpath)
 global year
-year = 2018
+global num_files
+year = 'sse'
+num_files = 12
+par_samples, obs_samples = read_candidate_set(outpath, num_files=12)
 if not os.path.exists(f'year_{year}/'):
     os.mkdir(f'year_{year}/')
 par_samples[f'din_{year}'] = obs_samples[f'din_{year}'].values
@@ -213,7 +220,10 @@ def unnormalized_posterior(gp, prior_pdf, samples, temper_param=1):
     # calculate the difference between gp values and the true model outputs
     true_meas = [52093.389, 99477.940, 44063.700, 57936.470, 
         53449.050, 21858.007, 38560.992, 51843.258, 14176.304]
-    error_diff = np.square(gp_vals - true_meas[int(year - 2009)])
+    if isinstance(year, int):
+        error_diff = np.square(gp_vals - true_meas[int(year - 2009)])
+    else:
+        error_diff = np.abs(gp_vals)
     unnormalized_posterior_vals = prior_vals*np.exp(-error_diff)**temper_param
     return unnormalized_posterior_vals
 
@@ -306,7 +316,7 @@ def bayesian_inference_example():
     param_file = file_settings()[-1]
 
     outpath = '../output/work_run_0520/'
-    par_samples, obs_samples = read_candidate_set(outpath)
+    par_samples, obs_samples = read_candidate_set(outpath, num_files)
     par_samples[f'din_{year}'] = obs_samples[f'din_{year}'].values
     
     # Must set variables if not using uniform prior on [0,1]^D

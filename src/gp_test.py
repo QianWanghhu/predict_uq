@@ -16,7 +16,7 @@ from sklearn.gaussian_process.kernels import RBF, \
     Matern
 
 from pyapprox.density import tensor_product_pdf
-from pyapprox.gaussian_process import CholeskySampler, AdaptiveGaussianProcess, generate_candidate_samples
+from pyapprox.gaussian_process import CholeskySampler, AdaptiveGaussianProcess, generate_gp_candidate_samples
 from pyapprox.low_discrepancy_sequences import transformed_halton_sequence
 from pyapprox.utilities import compute_f_divergence, \
     get_tensor_product_quadrature_rule
@@ -73,9 +73,6 @@ def read_candidate_set(outpath, num_files):
         return pars
 
     par_samples = rescale_parameters(outpath, pars)
-    # breakpoint()
-    par_samples['drf'] = par_samples['drf'] / 100
-    par_samples['drp'] = par_samples['drp'] / 100
     par_samples.drop(columns=['lcf'], inplace=True)
     true_meas = [52093.389, 99477.940, 44063.700, 57936.470, 
         53449.050, 21858.007, 38560.992, 51843.258, 14176.304]
@@ -323,7 +320,7 @@ def bayesian_inference_example():
     # variables = None
     ind_vars, variables = variables_prep(param_file, product_uniform='uniform', dummy=False)
     var_trans = AffineRandomVariableTransformation(variables, enforce_bounds=True)
-    init_scale = 0.5# used to define length_scale for the kernel
+    init_scale = 50# used to define length_scale for the kernel
     num_vars = variables.nvars
     num_candidate_samples = 20000
     num_new_samples = np.asarray([20]+[10]*10+[25]*8+[50]*10)
@@ -343,7 +340,7 @@ def bayesian_inference_example():
 
     # defining kernel
     length_scale = [init_scale, init_scale, *(3*np.ones(num_vars -2, dtype=float))]
-    kernel = RBF(length_scale, [(5e-2, 3), (5e-2, 3), (5e-2, 20), (5e-2, 15),
+    kernel = RBF(length_scale, [(5e-2, 200), (5e-2, 100), (5e-2, 20), (5e-2, 15),
         (5e-2, 20), (5e-2, 15), (5e-2, 20), (5e-2, 15), (5e-2, 20), 
         (5e-2, 15), (5e-2, 20), (5e-2, 15), (5e-2, 20)])
 
@@ -419,11 +416,11 @@ def bayesian_inference_example():
     axs[0].legend()
     plt.savefig(f'year_{year}/{figname}') 
 
-# if __name__ == '__main__':
-#     try:
-#         import sklearn
-#     except:
-#         msg = 'Install sklearn using pip install sklearn'
-#         raise Exception(msg)
+if __name__ == '__main__':
+    try:
+        import sklearn
+    except:
+        msg = 'Install sklearn using pip install sklearn'
+        raise Exception(msg)
 
-#     bayesian_inference_example()
+    bayesian_inference_example()

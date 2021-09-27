@@ -54,22 +54,18 @@ def pair_plot():
 #---------calculate parameter sensitivity-----------------#
 from funcs.read_data import file_settings, variables_prep
 from funcs.utils import partial_rank
-from gp_test import *
-fpath = 'year_mse/'
-gp = pickle.load(open(f'{fpath}gp_0_mse.pkl', "rb"))
+from gp_build import *
+fpath = 'year_pbias/'
+gp = pickle.load(open(f'{fpath}gp_1_pbias.pkl', "rb"))
 x_training = gp.X_train_
 y_training = gp.y_train_
 
 
-gp1 = pickle.load(open(f'{fpath}gp_1_mse.pkl', "rb"))
-x1_training = gp1.X_train_
-y1_training = gp1.y_train_
-
 # Resample in the ranges where the objective values are above 0
-x_select = x_training[np.where(y_training>0)[0], :]
-x_range = x_select.max(axis=0)
-univariable_temp = [stats.uniform(0, x_range[ii]) for ii in range(0, x_range.shape[0])]
-variable_temp = pya.IndependentMultivariateRandomVariable(univariable_temp)
+# x_select = x_training[np.where(y_training>0)[0], :]
+# x_range = x_select.max(axis=0)
+# univariable_temp = [stats.uniform(0, x_range[ii]) for ii in range(0, x_range.shape[0])]
+# variable_temp = pya.IndependentMultivariateRandomVariable(univariable_temp)
 
 # visualization the effects of factor fixing
 # define the variables for PCE

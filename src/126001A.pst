@@ -1,0 +1,67 @@
+pcf
+* control data
+restart estimation
+      14    10      1       0       1    
+1 1 single point
+10.0 -2.0 0.3 0.01 10
+10.0 10.0 0.001
+0.1
+   50  0.005 4 4 0.005 4
+0 0 0
+* singular value decomposition
+1
+13 5e-07
+0
+* parameter groups
+all_params relative 0.015 0.000 switch 2.0 parabolic
+* parameter data
+DRF	log     factor	50	0.00001	100	all_params	1	0
+DRP	log     factor	40	0.00001	100	all_params	1	0
+DWC	log     factor	50	0.00001	100	all_params	1	0
+LCF	fixed     factor	100	0.00001	100	all_params	1	0
+gfDWC	log     factor	50	0.00001	100	all_params	1	0
+gfEMC	log     factor	50	0.00001	100	all_params	1	0
+goDWC	log     factor	50	0.00001	100	all_params	1	0
+goEMC	log     factor	50	0.00001	100	all_params	1	0
+cDWC	log     factor	50	0.00001	100	all_params	1	0
+cEMC	log     factor	50	0.00001	100	all_params	1	0
+fDWC	log     factor	50	0.00001	100	all_params	1	0
+fEMC	log     factor	50	0.00001	100	all_params	1	0
+oDWC	log     factor	50	0.00001	100	all_params	1	0
+oEMC	log     factor	50	0.00001	100	all_params	1	0
+* observation groups
+p_bias
+DIN 
+* observation data
+DIN_pbias 0.000 1.00E-01 p_bias
+DIN_2009 52093.389 4.36E-05 DIN
+DIN_2010 99477.940 4.36E-05 DIN
+DIN_2011 44063.700 4.36E-05 DIN
+DIN_2012 57936.470 4.36E-05 DIN
+DIN_2013 53449.050 4.36E-05 DIN
+DIN_2014 21858.007 4.36E-05 DIN
+DIN_2015 38560.992 4.36E-05 DIN
+DIN_2016 51843.258 4.36E-05 DIN
+DIN_2017 14176.304 4.36E-05 DIN
+* model command line
+python run_source.py
+* model input/output
+parameters.tpl parameters.csv
+output.ins output.txt
+++ies_num_reals(100)
+++ies_parameter_ensemble(parameter_ensemble.csv)
+++overdue_giveup_minutes(20.0)
+++ies_add_base(true)
+++ies_lambda_mults(0.1,1.0,10) 
+++lambda_scale_fac(0.75, 0.925, 1.1 )
+++ies_subset_size(5)      
+++ies_reg_factor(0.35)  
+
+
+
+
+
+
+
+
+

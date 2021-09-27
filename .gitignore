@@ -4,3 +4,13 @@ MAlonzo/**
 output/
 
 src/funcs/__pycache__/
+
+src/pest_source/
+
+src/ies-data-prep/
+
+src/.vscode/
+
+src/__pycache__/
+
+.vscode/

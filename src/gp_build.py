@@ -47,19 +47,7 @@ mpl.rcParams['legend.fontsize'] = 16
 mpl.rcParams['text.latex.preamble'] = \
     r'\usepackage{siunitx}\usepackage{amsmath}\usepackage{amssymb}'
 
-
 def read_candidate_set(outpath, num_files):
-    for n in range(num_files):
-        par_temp = pd.read_csv(f'{outpath}126001A.{n}.par.csv', index_col = 'real_name', skiprows=[100])
-        obs_temp = pd.read_csv(f'{outpath}126001A.{n}.obs.csv', index_col = 'real_name', skiprows=[100])
-        try:
-            pars = pd.concat([pars, par_temp])
-            obs = pd.concat([obs, obs_temp])
-        except NameError:
-            pars = pd.read_csv(f'{outpath}126001A.{n}.par.csv', index_col = 'real_name', skiprows=[100])
-            obs = pd.read_csv(f'{outpath}126001A.{n}.obs.csv', index_col = 'real_name', skiprows=[100])
-            
-
     def rescale_parameters(outpath, pars):
         """
         Transform parameters into the original ranges
@@ -72,6 +60,16 @@ def read_candidate_set(outpath, num_files):
 
         return pars
 
+    for n in range(num_files[0], num_files[1]):
+        par_temp = pd.read_csv(f'{outpath}126001A.{n}.par.csv', index_col = 'real_name', skiprows=[100])
+        obs_temp = pd.read_csv(f'{outpath}126001A.{n}.obs.csv', index_col = 'real_name', skiprows=[100])
+        try:
+            pars = pd.concat([pars, par_temp])
+            obs = pd.concat([obs, obs_temp])
+        except NameError:
+            pars = pd.read_csv(f'{outpath}126001A.{n}.par.csv', index_col = 'real_name', skiprows=[100])
+            obs = pd.read_csv(f'{outpath}126001A.{n}.obs.csv', index_col = 'real_name', skiprows=[100])
+
     par_samples = rescale_parameters(outpath, pars)
     par_samples.drop(columns=['lcf'], inplace=True)
     true_meas = [52093.389, 99477.940, 44063.700, 57936.470, 
@@ -79,7 +77,7 @@ def read_candidate_set(outpath, num_files):
     obs.reset_index(inplace=True)
     for ii in range(obs.shape[0]):
         obs.loc[ii, 'din_mse'] = (4.36e-05**2)*sp.objectivefunctions.mse(true_meas, obs.loc[:, 'din_2009':'din_2017'].values[ii])
-
+    obs['din_pbias'] = 0.01*obs['din_pbias'] **2
     return pars, obs
     # END read_candidate_set()
 
@@ -87,8 +85,11 @@ outpath = '../output/work_run_0520/'
 global year
 global num_files
 year = 'mse'
-num_files = 12
-par_samples, obs_samples = read_candidate_set(outpath, num_files=12)
+num_files = [0, 9]
+par_samples, obs_samples = read_candidate_set(outpath, num_files=num_files)
+par_vali, obs_vali = read_candidate_set(outpath, num_files=[9, 12])
+values_vali = obs_vali[f'din_{year}'].values
+
 if not os.path.exists(f'year_{year}/'):
     os.mkdir(f'year_{year}/')
 par_samples[f'din_{year}'] = obs_samples[f'din_{year}'].values
@@ -184,9 +185,9 @@ def convergence_study(kernel, function, sampler,
             if sample_step >=1:
                 # Compute error
                 gp_load = pickle.load(open(f'year_{year}/gp_{np.mod(sample_step - 1, 2)}_{year}.pkl', "rb"))
-                validation_sub = sampler.training_samples[:, num_samples[sample_step - 1]:num_samples[sample_step]]
+                validation_sub = par_vali.values.T
                 pred_values = gp_load(validation_sub, return_cov=False).squeeze()
-                values_sub = gp(validation_sub, return_cov=False).squeeze()
+                values_sub = values_vali
                 error_gp_comp = norm(pred_values-values_sub)/norm(values_sub)
                 print('-----------error_gp_comp---------', error_gp_comp)
 
@@ -323,7 +324,7 @@ def bayesian_inference_example():
     init_scale = 50# used to define length_scale for the kernel
     num_vars = variables.nvars
     num_candidate_samples = 20000
-    num_new_samples = np.asarray([20]+[10]*10+[25]*8+[50]*10)
+    num_new_samples = np.asarray([20]+[10]*10+[20]*9+[50]*8)
 
 
     prior_pdf = partial(tensor_product_pdf, 

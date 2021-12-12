@@ -72,7 +72,3 @@ with open(output_file, 'w') as f:
     f.write('---- Obs 2 ----  \n')
     f.write(str(vals[1]) + '\n') 
 
-
-# import scipy
-# x = np.array([[0.4, 0.8, 0.75], [0.7, 0.3, 0.75]])
-# call_functions(x)

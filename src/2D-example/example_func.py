@@ -3,33 +3,6 @@ from multiprocessing import Pool
 import numpy as np
 import pandas as pd
 import os
-import matplotlib.pyplot as plt
-from functools import partial
-import time
-import copy
-
-from scipy.stats import multivariate_normal
-from scipy import stats
-# from scipy.optimize import root
-from scipy.optimize import bisect
-
-from sklearn.gaussian_process.kernels import RBF, \
-    Matern
-
-import matplotlib as mpl
-mpl.rcParams['font.size'] = 16
-mpl.rcParams['lines.linewidth'] = 3
-mpl.rcParams['text.usetex'] = True  # use latex for all text handling
-mpl.rcParams['savefig.bbox'] = 'tight'
-mpl.rcParams['savefig.format'] = 'pdf'  # gives best resolution plots
-mpl.rcParams['axes.labelsize'] = 20
-mpl.rcParams['axes.titlesize'] = 20
-mpl.rcParams['xtick.labelsize'] = 20
-mpl.rcParams['ytick.labelsize'] = 20
-mpl.rcParams['legend.fontsize'] = 16
-# print mpl.rcParams.keys()
-mpl.rcParams['text.latex.preamble'] = \
-    r'\usepackage{siunitx}\usepackage{amsmath}\usepackage{amssymb}'
 
 def rosenbrock_function(x):
     assert x.shape[0] == 2, "The first dimension of x should be 2 being equale to the number of parameters."
@@ -63,7 +36,7 @@ def wrap_function(ident):
     else:
         return non_identifiable_example
 
-def call_functions(x, ident=True):
+def call_functions(x, ident=False):
     """
     Parameters:
     ============
@@ -75,26 +48,31 @@ def call_functions(x, ident=True):
     vals: model outputs
     """
     vals = wrap_function(ident)(x)
+    vals = np.squeeze(vals)
     
     return vals
 
 
-if __name__ == '__main__':
-    output_file = 'example_output.txt'
-    print('Read Parameters')
-    parameters = pd.read_csv('parameters.csv')
-    parameters_vals = np.zeros(shape=(parameters.shape[0], 1))
-    for i,j in parameters.iterrows():
-        scaled_value = (j.upper - j.lower) * j.value/100 + j.lower 
-        parameters_vals[i] = scaled_value
+output_file = 'example_output.txt'
+print('Read Parameters')
+parameters = pd.read_csv('parameters.csv')
+parameters_vals = np.zeros(shape=(parameters.shape[0], 1))
+for i,j in parameters.iterrows():
+    scaled_value = (j.upper - j.lower) * j.value/100 + j.lower 
+    parameters_vals[i] = scaled_value
 
-    # call the function
-    vals = call_functions(parameters_vals)
+# call the function
+vals = call_functions(parameters_vals)
 
-    # write outputs to output.txt
-    with open(output_file, 'w') as f:
-        f.write('---- Obs 1----  \n')
-        f.write(str(vals[0]) + '\n')
-        
-        f.write('---- Obs 2 ----  \n')
-        f.write(str(vals[1]) + '\n') 
+# write outputs to output.txt
+with open(output_file, 'w') as f:
+    f.write('---- Obs 1----  \n')
+    f.write(str(vals[0]) + '\n')
+    
+    f.write('---- Obs 2 ----  \n')
+    f.write(str(vals[1]) + '\n') 
+
+
+# import scipy
+# x = np.array([[0.4, 0.8, 0.75], [0.7, 0.3, 0.75]])
+# call_functions(x)

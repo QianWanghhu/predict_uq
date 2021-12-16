@@ -14,7 +14,6 @@ def rosenbrock_function(x):
     vals[1] = 4 * x[1] - 2 - (4 * x[0] - 2)**2
     return vals
 
-
 def non_identifiable_example(x):
     assert x.shape[0], "The first dimension of x should be 2 being equale to the number of parameters."
     # x = 4 * x - 2
@@ -36,7 +35,7 @@ def wrap_function(ident):
     else:
         return non_identifiable_example
 
-def call_functions(x, ident=False):
+def call_functions(x, ident=True):
     """
     Parameters:
     ============
@@ -62,7 +61,7 @@ for i,j in parameters.iterrows():
     parameters_vals[i] = scaled_value
 
 # call the function
-vals = call_functions(parameters_vals)
+vals = call_functions(parameters_vals, ident=False)
 
 # write outputs to output.txt
 with open(output_file, 'w') as f:

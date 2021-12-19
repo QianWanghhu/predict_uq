@@ -20,7 +20,7 @@ def non_identifiable_example(x):
     # vals = ((1 - (x[0, :] + x[1, :])) ** 2 + 25 * (x[0, :] + x[1, :]) ** 2)[:, np.newaxis]
     vals = np.zeros(shape=(2, x.shape[1]))
     vals[0] = 4 * x[0] - 2 + 4 * x[1] - 2
-    vals[1] = 1 /2 * (4 * x[0] - 2 + 4 * x[1] - 2)
+    vals[1] = 2*(4 * x[0] - 2 + 4 * x[1] - 2) - 0.5
     return vals
 
 def wrap_function(ident):
@@ -43,7 +43,7 @@ def call_functions(x, ident=True):
     ident: Boolean, use rosenbrock_function if True; non-identifiable_example if False.
 
     return:
-    =========
+    ========
     vals: model outputs
     """
     vals = wrap_function(ident)(x)

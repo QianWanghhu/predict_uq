@@ -25,16 +25,16 @@ def model_in_out(x, ident):
         y2 = x[1] - x[0]**2
     else:
         y1 = x[0] + x[1]
-        y2 = 1/2 * y1
+        y2 = 2 * y1 - 0.5
     return [y1, y2]
 
 def neg_likelihood(x, ident=True):
     x = 4*x-2
     if ident:
-        vals = 1 * ((1.-x[0, :])**2 + 100*(x[1, :]-x[0, :]**2)**2)
+        vals = 4 * ((1.-x[0, :])**2 + 1*(x[1, :]-x[0, :]**2)**2)
         vals = np.exp(-vals)
     else:
-        vals = 1 * ((1 - (x[0, :] + x[1, :])) ** 2 + 4 * (x[0, :] + x[1, :]) ** 2)
+        vals = 4 * (1 - (x[0, :] + x[1, :])) ** 2 + (2 * (x[0, :] + x[1, :]) - 0.5)** 2
         vals = np.exp(-vals)
     return vals
 
@@ -73,7 +73,7 @@ def contour_plot():
 def plot_3D():
     ident_bool = [True, False]
     for i in range(len(ident_bool)):
-        fig = plt.figure(figsize=(8, 6))
+        fig = plt.figure(figsize=(10, 8))
         ax = Axes3D(fig)
         delta = 0.01
         # 生成代表X轴数据的列表

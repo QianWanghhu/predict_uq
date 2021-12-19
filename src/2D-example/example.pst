@@ -16,13 +16,13 @@ restart estimation
 all_params relative 0.015 0.000 switch 2.0 parabolic
 * parameter data
 ya	log     factor	50	0.00001	100	all_params	1	0
-yb	log     factor	50	0.00001	100	all_params	1	0
+yb	fixed     factor	30	0.00001	100	all_params	1	0
 * observation groups
 obs_1
 obs_2 
 * observation data
-obs_1 1.000 10 obs_1
-obs_2 0.000 5 obs_2
+obs_1 1.000 2 obs_1
+obs_2 0.000 1 obs_2
 * model command line
 python example_func.py
 * model input/output

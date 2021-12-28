@@ -11,7 +11,7 @@ library(dplyr)
 library(ggplot2)
 library(zoo)
 library(gridExtra)
-
+library(lubridate)
 
 # Generate functions ---------------------------------------------------------------
 
@@ -19,131 +19,6 @@ library(gridExtra)
 as.year <- function(x) as.integer(as.yearmon(x) - 6/12)
 
 ### Linear interpolation function 
-loadlinear <- function(flowdf, concdf, seconds, minconc){
-  flowzoo <- read.zoo(flowdf, header = TRUE)
-  conczoo <- read.zoo(concdf, header = TRUE, aggregate = mean) #take average for same time step
-  
-  # merge flow and concentration data
-  flowconczoo <- merge(flowzoo, conczoo)
-  names(flowconczoo) <- c("flow", "conc")
-  
-  # assign tiedowns: begin with half of min value of concentration, and end of the min value.
-  flowconczoo[1,"conc"] <- minconc/2
-  flowconczoo$conc[nrow(flowconczoo)] <- minconc
-  
-  # interpolate concentration
-  flowconczoo$conc <- na.approx(flowconczoo$conc, rule = 1)
-
-  # hourly load, mg/L * m3/s = g/s
-  flowconczoo$load <- flowconczoo$conc*flowconczoo$flow
-
-  # aggregate to annual mean instant flow, concentration and load 
-  yearly <- aggregate(flowconczoo, as.year(time(flowconczoo)), mean)
-  yearly <- as.data.frame(yearly)
-  yearly <- yearly[-1,]  # removed the first first row (10 data points, i.e. 10 hours) due to unresolved issue on timezone
-  
-  # calculate annual total load via: multiply mean instant load by number of seconds in that year, then convert unit to t/yr
-  yearly$load <- round(yearly$load*seconds * 0.000001, 3) #g/s * s/yr = g/yr. 10^-6g/yr = t/yr
-  return(yearly)
-}
-
-
-### Beale ratio function 
-
-loadbeale <- function(flowdf, concdf, seconds, biasfun){
-  flowzoo <- read.zoo(flowdf, header = TRUE)
-
-  conczoo <- read.zoo(concdf, header = TRUE, aggregate = mean) #take average for same time step
-  
-  # merge flow and concentration data
-  flowconczoo <- merge(flowzoo, conczoo)
-  names(flowconczoo) <- c("flow", "conc")
-  
-  # convert data from zoo to dataframe format
-  flowconc <- data.frame(Datetime = index(flowconczoo), as.data.frame(flowconczoo))
-  
-  # create hydrology year column
-  flowconc$hyear <- as.year(flowconc$Datetime)
-  flowconc$hyear[c(1:10)] <- flowconc$hyear[11] ## wrap the first 10 hours to year 2009, due to unresolved issue to make time zone match.
-  
-  # calculate load for each hour time step
-  flowconc$load <- flowconc$flow*flowconc$conc
-
-  # calculate mean instant load Lm
-  Lm <- flowconc %>%
-    group_by(hyear) %>% 
-    dplyr::summarise_at(c("load", "flow"), mean, na.rm=TRUE)
-  
-  # create identifier (A) to tag dates with/without concentration data
-  flowconc$A <- 1
-  flowconc$A[is.na(flowconc$conc)] <- NA
-
-  # calculate AQ: 
-  flowconc$AQ <- flowconc$flow*flowconc$A
-  
-  # calculate flow ratio adjustment factor Fa
-  Fa <- flowconc %>%
-    group_by(hyear) %>%
-    dplyr::summarise_at(c("flow", "AQ"), mean, na.rm=TRUE) %>%
-    mutate(Fa = flow/AQ) #mean of annual flow divided by the mean of flows with concentration samples
-  
-  # calculate ACQ^2
-  flowconc$ACQ2 <- flowconc$A*flowconc$conc*flowconc$flow*flowconc$flow
-  
-  # calculate AQ^2
-  flowconc$AQ2 <- flowconc$A*flowconc$flow*flowconc$flow
-
-  # calculate ACQ
-  flowconc$ACQ <- flowconc$A*flowconc$conc*flowconc$flow
-  
-  # calculate Q^2
-  flowconc$Q2 <- flowconc$flow*flowconc$flow
-
-  # calculate bias correction factors
-
-  if(biasfun == 1){
-    Bf <- flowconc %>%
-      group_by(hyear) %>%
-      dplyr::summarise(across(.cols = c("AQ", "ACQ", "Q2"), ~ mean(.x, na.rm = TRUE)), 
-                       across(.cols = c("ACQ2", "AQ2", "A"),  ~ sum(.x, na.rm = TRUE)), 
-                       across(.cols = c("flow"), ~ length(.x))) %>%
-      mutate(Slq = (1/(A - 1))*(ACQ2 - A*AQ*ACQ)) %>%
-      mutate(Sq2 = (1/(A - 1))*(AQ2 - A*Q2)) %>%
-      mutate(Bf = (1+(1/A)*(Slq/(ACQ*AQ)))/(1+(1/A)*(Sq2/AQ2)))
-  } else if (biasfun == 2){
-    Bf <- flowconc %>%
-      group_by(hyear) %>%
-      dplyr::summarise(across(.cols = c("AQ", "ACQ", "Q2"), ~ mean(.x, na.rm = TRUE)), 
-                       across(.cols = c("ACQ2", "AQ2", "A"),  ~ sum(.x, na.rm = TRUE)), 
-                       across(.cols = c("flow"), ~ length(.x))) %>%
-      mutate(Slqb2 = (1/(A - 1))*(ACQ - A*AQ*ACQ)) %>%
-      mutate(Sq2b2 = (1/(A - 1))*(AQ - A*Q2)) %>%
-      mutate(Bf = (1+(1/A)*(Slqb2/(ACQ*AQ)))/(1+(1/A)*(Sq2b2/AQ2)))
-  } else if (biasfun == 3){
-    Bf <- flowconc %>%
-      group_by(hyear) %>%
-      dplyr::summarise(across(.cols = c("AQ", "ACQ", "Q2"), ~ mean(.x, na.rm = TRUE)), 
-                       across(.cols = c("ACQ2", "AQ2", "A"),  ~ sum(.x, na.rm = TRUE)), 
-                       across(.cols = c("flow"), ~ length(.x))) %>%
-      mutate(Slq = (1/(A - 1))*(ACQ2 - A*AQ*ACQ)) %>%
-      mutate(Sq2 = (1/(A - 1))*(AQ2 - A*Q2)) %>%
-      mutate(Bf = (1+((1-A/flow)/A)*(Slq/(ACQ*AQ)))/(1+((1-A/flow)/A)*(Sq2/AQ2)))
-  }
-  
-  colnames(Bf)[colnames(Bf) == "flow"] <- "days"
-
-  # join inputs for Beale ratio equations together
-  Beale <- left_join(Lm, Fa, by=c("hyear", "flow"))
-  Beale <- left_join(Beale, Bf, by=c("hyear", "AQ"))
-  
-  # calculate annual load
-  Bealeload <- as.data.frame(Beale)
-  Bealeload$bealeload = round(Bealeload$load*Bealeload$Fa*Bealeload$Bf*seconds * 0.000001, 3)
-  Bealeload$Biasfactor = biasfun
-  
-  return(Bealeload)
-  
-}
 
 
 ### Random sampling functions for sample frequency analysis
@@ -211,8 +86,6 @@ samplefreqfun <- function(flowdf, concdf, seconds,minconc, loadfun, biasfun, ran
 }
 
 
-
-
 # Import data -------------------------------------------------------------
 ### Import and format flow data
 # import flow data
@@ -221,13 +94,16 @@ flow <- read.csv("126001A_flows.csv", skip = 1, header = F)
 # tidy flow data to date, flow, qc format
 colnames(flow) <- rep(c("Datetime", "flow", "QC","X"), 10)
 flow <- rbind(flow[,c(1:3)], flow[,c(5:7)], flow[,c(9:11)], flow[,c(13:15)], flow[,c(17:19)], 
-              flow[,c(21:23)], flow[,c(25:27)], flow[,c(29:31)], flow[,c(33:35)], flow[,c(37:39)])
+              flow[,c(21:23)], flow[,c(25:27)], flow[,c(29:31)], flow[,c(33:35)])
 
 flow <- na.omit(flow) 
 
 flow$Datetime <- strptime(flow$Datetime, format="%d/%m/%Y %H:%M", tz = "Australia/Brisbane")
 
-
+# Qian's edit
+flowunc <- flow
+flowunc$flowuncbound <- 0
+  
 # create flow upper bounds and lower bounds data
 flowup <- mutate(flow, flow = case_when(
   QC == 9 ~ flow*1.05,
@@ -250,24 +126,45 @@ flow <- flow[,-3]
 flowup <- flowup[,-3]
 flowlow <- flowlow[,-3]
 
+# create flow upper bounds and lower bounds data
+flowuncup <- mutate(flowunc, flowuncbound = case_when(
+  QC == 9 ~ 0.05,
+  QC == 10 ~ 0.1,
+  QC == 20 ~ 0.2,
+  QC == 30 ~ 0.5,
+  QC == 60 ~ 0.75,
+  TRUE ~ flowuncbound))
+
+flowunclow <- mutate(flowunc, flowuncbound = case_when(
+  QC == 9 ~ 0.05,
+  QC == 10 ~ 0.1,
+  QC == 20 ~ 0.2,
+  QC == 30 ~ 0.5,
+  QC == 60 ~ 0.75,
+  TRUE ~ flowuncbound))
+# Form the flowunc* into two columns (Datatime, flowuncbound)
+flowuncup <- flowuncup[,c(1, 4)]
+flowunclow <- flowunclow[,c(1, 4)]
+flowuncbest <- flowunc[,c(1, 4)]
+
 
 ### import and format concentration data
-conc <- read.csv("126001A_concentrations_conditions.csv", header=TRUE, stringsAsFactors=FALSE) #TSS mg/L, NOx mg/L
+conc <- read.csv("126001A_din_concentrations_conditions.csv", header=TRUE, stringsAsFactors=FALSE) #TSS mg/L, NOx mg/L
 
-# take only time, TSS, NOX, conditoins
-conc <- conc[,c(3:10)]
-colnames(conc) <- c("Datetime", "TSS", "NOx", "Flow_at_sample_time", "Equipment_contamination", "Sample_Temp", "Days_from_sample_to_analysis", "Days_to_filtering")
+# take only time, TSS, NOX, conditions
+conc <- conc[,c(3:11)]
+colnames(conc) <- c("Datetime", "NOx", "NH4", "DIN", "Flow_at_sample_time", "Equipment_contamination", "Sample_Temp", "Days_from_sample_to_analysis", "Days_to_filtering")
 
 # round the concentration data to nearest hour
 conc$Datetime <- strptime(conc$Datetime, format="%d/%m/%Y %H:%M", tz = "Australia/Brisbane")
 conc$Datetime <- round(conc$Datetime, units = "hours")
 
 # convert less than values to the corresponding threshold values
-conc$TSS[conc$TSS=="<1"] = 1
+conc$TSS[conc$NH4=="<0.002"] = 0.002
 conc$NOx[conc$NOx=="<0.001"] = 0.001
 
-# convert TSS and NOx data from character to numeric
-indx <- sapply(conc[,c(2:3)], is.character)
+# convert NOx, NH4 and DIn data from character to numeric
+indx <- sapply(conc[,c(2:4)], is.character)
 conc[indx] <- lapply(conc[indx], function(x) as.numeric(x))
 
 # convert blank data to NA
@@ -277,8 +174,8 @@ conc$Equipment_contamination[conc$Equipment_contamination == "" ] <- NA
 conc$Lab <- "All"
 
 # create separate TSS and Nox concentration data
-tss <- conc[,-3]
-nox <- conc[,-2]
+nox <- conc[,c(-3, -4)]
+din <- conc[,c(-2, -3)]
 
 ## convert days in category conditions
 thresholds <- read.csv("time thresholds.csv")
@@ -309,7 +206,6 @@ nox$comb <- paste(paste("Flow at sample time", nox$Flow_at_sample_time, sep=" ")
                   paste("Lab", nox$Lab, sep=" "),
                   sep = ",")
 
-
 ### create concentration uncertainty library
 bounds <- read.csv("condition uc bounds.csv")
 conditions <- unique(bounds$Condition)
@@ -332,14 +228,17 @@ expandfun <- function(df, bound){
   newdf <- expand.grid(df1, df2, df3, df4, df5, df6)
 }
 
+# This is where to change for Qian's work
+# Combine the uncertain bounds in a multiplicative way.
 combfun <- function(df){
-  combound <- round((1+df$Var1)*(1+df$Var2)*(1+df$Var3)*(1+df$Var4)*(1+df$Var6)-1, 2)
+  combound <- round(sqrt((df$Var1**2) + (df$Var2**2) + (df$Var3**2) + (df$Var4**2) + (df$Var6**2)), 2)
 }
 
 Calcol <- c("Median.Upper", "Median.Lower", "Absolute.extremes.Upper", "Absolute.extremes.Lower", "Refined.extremes.Upper", "Refined.extremes.Lower", "ID1.Upper", "ID1.Upper","ID1.Lower","ID2.Upper","ID2.Lower","ID3.Upper","ID3.Lower","ID4.Upper","ID4.Lower","ID5.Upper","ID5.Lower","ID6.Upper","ID6.Lower","ID7.Upper","ID7.Lower","ID8.Upper","ID8.Lower","ID9.Upper","ID9.Lower","ID10.Upper","ID10.Lower","ID11.Upper","ID11.Lower","ID12.Upper","ID12.Lower")
 
 temp <- list()
 
+# Calculate the uncertainty bounds for different Calcol category
 for (i in Calcol){
   temp[[i]] <- expandfun(bound2, i)
   temp[[i]] <- combfun(temp[[i]])
@@ -352,6 +251,7 @@ comball <- cbind(expcond, comball)
 
 comball$comb <- paste(comball$Var1, comball$Var2, comball$Var4, comball$Var3, comball$Var5, "Lab All", sep = ",") #slight variation in the order of the variables, better code needed
 
+# select the Median.Upper and Median.Lower to represent the uncertainty bounds
 comball_sub <- comball[,c("comb", "Median.Upper", "Median.Lower")]
 noxcomb <- merge(nox, comball_sub, by="comb", all= TRUE)
 noxcomb <- noxcomb[!is.na(noxcomb$Datetime),] 
@@ -360,78 +260,131 @@ noxcomb <- noxcomb[,c("Datetime", "NOx", "Median.Upper", "Median.Lower")]
 noxcomb <- noxcomb[order(noxcomb$Datetime),]
 rownames(noxcomb) <- 1:nrow(noxcomb)
 
-noxup <- mutate(noxcomb, NOx = NOx*(1+Median.Upper))[,c(1,2)]
+# Qian to change the code here for preparing the concdf
+noxuncup <- noxcomb[,c(1,3)]
+names(noxuncup)<-c('Datetime', 'concuncbound')
+noxunclow <- noxcomb[,c(1,4)]
+names(noxunclow)<-c('Datetime', 'concuncbound')
+noxbest <- mutate(noxcomb, NOx=NOx)[,c(1:2)] ##remove extra column to keep just datetime and nox.
+names(noxbest)<-c('Datetime', 'concuncbound')
 
-noxlow <- mutate(noxcomb, NOx = NOx*(1+Median.Lower))[,c(1,2)]
+# Test the functions below
+conclinear <- function(flowdf, concdf, minconc){
+  flowzoo <- read.zoo(flowdf, header = TRUE)
+  conczoo <- read.zoo(concdf, header = TRUE, aggregate = mean) #take average for same time step
+  
+  # merge flow and concentration data
+  flowconczoo <- merge(flowzoo, conczoo)
+  names(flowconczoo) <- c("flow", "conc")
+  
+  # assign tiedowns: begin with half of min value of concentration, and end of the min value.
+  flowconczoo[1,"conc"] <- minconc/2
+  flowconczoo$conc[nrow(flowconczoo)] <- minconc
+  
+  # interpolate concentration
+  flowconczoo$conc <- na.approx(flowconczoo$conc, rule = 1)
+  return(flowconczoo)
+  
+}
 
-noxcomb <- noxcomb[,c(1:2)] ## remove extra column to keep just datetime and nox. 
-noxup <- noxup[,c(1:2)]
-noxlow <- noxlow[,c(1:2)]
 
-### setting other input data
-yearlyseconds <- c(31532400,31532400,31618800,31532400,31532400,31532400,31618800,31532400,31532400,31532400)
+loadlinear <- function(flowconczoo, seconds){
+  
+  # hourly load, mg/L * m3/s = g/s
+  flowconczoo$load <- flowconczoo$conc*flowconczoo$flow
+  
+  # aggregate to annual mean instant flow, concentration and load 
+  yearly <- aggregate(flowconczoo, as.year(time(flowconczoo)), mean)
+  yearly <- as.data.frame(yearly)
+  yearly <- yearly[-1,]  # removed the first first row (10 data points, i.e. 10 hours) due to unresolved issue on timezone
+  
+  # calculate annual total load via: multiply mean instant load by number of seconds in that year, then convert unit to t/yr
+  yearly$load <- round(yearly$load*seconds * 0.000001, 3) #g/s * s/yr = g/yr. 10^-6g/yr = t/yr
+  return(yearly)
+}
 
-MinTSS = 1
+
+loadunc <- function(flowconzoo, concunc, flowunc, concdf, minconc){
+  conczoo <- read.zoo(concdf, header = TRUE, aggregate = mean)
+  # Add tiedowns to the observed concentration data so as to enable interpolation
+  concdfnew <- data.frame(Datetime = index(conczoo), conc = as.data.frame(conczoo)$conc)
+  concdfnew <- rbind(concdfnew, data.frame(Datetime=flowunc$Datetime[1], conc=minconc/2))
+  concdfnew <- rbind(concdfnew, data.frame(Datetime=flowunc$Datetime[length(flowunc$Datetime)], conc=minconc))
+  concdfnew <- concdfnew[order(concdfnew$Datetime),]
+  
+  df_temp <- as.data.frame(flowconczoo)
+  flowcondf <- data.frame(Datetime=flowunc$Datetime, flow=df_temp$flow, conc=df_temp$conc)
+  time_conc_sample = concdfnew$Datetime
+  # assign initial values used for calculation
+  flowcondf$slope = 1
+  concunc$concuncsq <- concunc$concuncbound**2
+  flowunc <- mutate(flowunc, flowuncbound = flowuncbound**2)
+  names(concdfnew) <- c('Datetime', 'conc')
+  flowcondf$flowuncbound <- flowunc$flowuncbound # Assign values of flow uncertainty bounds
+  flowcondf$concuncbound <- 0
+  flowcondf[flowcondf$Datetime == time_conc_sample[1],"concuncbound"] <- max(concunc$concuncsq)
+
+  flowcondf[flowcondf$Datetime == time_conc_sample[length(time_conc_sample)], "concuncbound"] <- max(concunc$concuncsq)
+  
+  for (i in 1:(length(time_conc_sample) - 1)){
+    if (i> 1){
+    
+      flowcondf[flowcondf$Datetime == time_conc_sample[i], "concuncbound"] <- mean(concunc[concunc$Datetime==time_conc_sample[i], "concuncsq"])
+      }
+  }
+  
+  for (i in 1:(length(time_conc_sample) - 1)){
+    # If a data is obtained by interpolation, calculate the concentration uncertainty using the eq. in chapter 4.
+    diff_time_sample <- as.integer(difftime(time_conc_sample[i + 1], time_conc_sample[i], units = 'hours'))
+    
+    if (diff_time_sample > 1){
+      for (k in 1:(diff_time_sample - 1)){
+        # browser()
+        slope_interp = (diff_time_sample - k) / diff_time_sample
+        time_k = time_conc_sample[i] + hours(k)
+        flowcondf[flowcondf$Datetime == time_k, "slope"] <- slope_interp
+        conc_delta_i = concdfnew[concdfnew$Datetime == time_conc_sample[i], "conc"] * flowcondf[flowcondf$Datetime == time_conc_sample[i], "concuncbound"]
+        conc_delta_i2 = concdfnew[concdfnew$Datetime == time_conc_sample[i+1], "conc"] * flowcondf[flowcondf$Datetime == time_conc_sample[i+1], "concuncbound"]
+        conc_delta_k = (slope_interp*conc_delta_i)**2 + ((1 - slope_interp)*conc_delta_i2)**2
+        conc_k = flowcondf[flowcondf$Datetime == time_k, "conc"]
+        flowcondf[flowcondf$Datetime == time_k, "concuncbound"] <- conc_delta_k / conc_k**2
+      }
+    # END if
+    }
+  # END if
+  }
+  flowcondf$loaduncbound = flowcondf$concuncbound + flowcondf$flowuncbound
+  return(flowcondf)
+}
+
+  loaduncdf <- flowcondf[, c(1, 7)]
+  # aggregate to annual load
+  # fcloadzoo <- as.zoo(loaduncdf)
+  fcloadzoo <- read.zoo(loaduncdf, header = TRUE, aggregate = mean)
+  browser()
+  yearly <- aggregate(fcloadzoo, as.year(time(fcloadzoo)), sum)
+  yearly <- as.data.frame(yearly)
+  yearly <-  yearly[-1,]
+  yearly = mutate(yearly, loaduncbound = sqrt(loaduncbound))
+  return(yearly)
+}
+
+# test functions
+flowconczoo <- conclinear(flow, noxbest, MinNOx)
+yearlyload <- loadlinear(flowconczoo, yearlyseconds)
+flowcondf <- loadunc(flowconczoo, noxuncup, flowuncup, noxbest, MinNOx)
+
+
+## setting other input data
+yearlyseconds <- c(31532400,31532400,31618800,31532400,31532400,31532400,31618800,31532400,31532400)
+
+MinNH4 = 0.002
 MinNOx = 0.001
 
 ### scenarios data
 
 flow_scenarios <- list(flow = flow, flowup = flowup, flowlow = flowlow)
-nox_scenarios <- list(nox = noxcomb[,c(1,2)], noxup = noxup[,c(1,2)], noxlow = noxlow[,c(1,2)])
-
-
-# Estimate and plot flow uncertainty ------------------------------------------------------------
-
-# test impacts of flow, linear  
-noxout <- list()
-for (i in names(flow_scenarios)){
-  noxout[[i]] <- loadlinear(flow_scenarios[[i]], noxcomb, yearlyseconds, MinNOx)
-  noxout[[i]]$flowscenario <- i
-  noxout[[i]]$hyear <- row.names(noxout[[i]])
-}
-
-# alternatively: test impacts of flow, beale 
-noxout <- list()
-for (i in names(flow_scenarios)){
-  noxout[[i]] <- loadbeale(flow_scenarios[[i]], noxcomb, yearlyseconds, biasfun = 1)
-  noxout[[i]]$flowscenario <- i
-}
-
-
-# plotting flow uncertainty
-flowscennox <- as.data.frame(noxout)
-
-flowscennox %>%
-  group_by(flow.hyear) %>%
-  summarise(flowupbound = flowup.load/flow.load -1, flowlowbound = 1-  flowlow.load/flow.load)
-
-noxtop <- ggplot(flowscennox, aes(x=flow.hyear))+
-  geom_col(aes(y=flow.load), fill = "wheat3")+
-  geom_errorbar(aes(ymin = flowlow.load, ymax = flowup.load), colour="black", width=0.3)+
-  xlab("Hydrological year")+
-  ylab("NOx Load (t/yr)")+
-  theme_bw()
-
-noxmid <- ggplot(flowscennox, aes(x=flow.hyear))+
-  geom_point(aes(y=flowup.load/flow.load), colour = "steel blue")+
-  geom_point(aes(y=flowlow.load/flow.load), colour = "tomato")+
-  geom_hline(yintercept=1, linetype="dashed") +
-  ylim (0.5,1.5)+
-  labs(y = "Load Ratio (Flow Bounds/Flow Obs)", x="Hydrological year")+
-  scale_colour_brewer("Beale's Bias Correction", palette="Dark2")+
-  theme_bw()
-
-noxbot <- ggplot(flowscennox, aes(x=flow.flow))+
-  geom_point(aes(y=flowup.load/flow.load), colour = "steel blue")+
-  geom_point(aes(y=flowlow.load/flow.load), colour = "tomato")+
-  geom_hline(yintercept=1, linetype="dashed") +
-  ylim (0.5,1.5)+
-  labs(y = "Load Ratio (Flow Bounds/Flow Obs)", x="Annual Mean Hourly Flow (Cumecs)")+
-  scale_colour_brewer("Beale's Bias Correction", palette="Dark2")+
-  theme_bw()
-
-grid.arrange(noxtop,  noxmid,  noxbot, ncol=3, nrow=1)#, widths=c(1, 1), heights=c(1, 1,1))
-
+nox_scenarios <- list(nox = noxcomb, noxup = noxup, noxlow = noxlow)
 
 # Estimate and plot concentration uncertainty ---------------------------------------------------
 
@@ -443,15 +396,6 @@ for (i in names(nox_scenarios)){
   noxout[[i]]$concscenario <- i
   noxout[[i]]$hyear <- row.names(noxout[[i]])
 }
-
-# alternatively, test impacts of concentration, beale  
-noxout <- list()
-
-for (i in names(nox_scenarios)){
-  noxout[[i]] <- loadbeale(flow, nox_scenarios[[i]], yearlyseconds, biasfun = 1)
-  noxout[[i]]$concscenario <- i
-}
-
 
 # plotting concentration uncertainty
 flowscennox <- as.data.frame(noxout)
@@ -480,55 +424,6 @@ noxbot <- ggplot(flowscennox, aes(x=nox.flow))+
   theme_bw()
 
 grid.arrange(noxtop, noxmid, ncol=2, nrow=1)#, widths=c(1,1))
-
-
-# Estimate and plot load estimation function uncertainty ---------------------------------------------------
-## estimating load estimation function uncertainty
-
-noxlinear <- loadlinear(flow, noxcomb, yearlyseconds, MinNOx)
-noxbeale1 <- loadbeale(flow, noxcomb, yearlyseconds, biasfun = 1)
-noxbeale2 <- loadbeale(flow, noxcomb, yearlyseconds, biasfun = 2)
-noxbeale3 <- loadbeale(flow, noxcomb, yearlyseconds, biasfun = 3)
-
-colnames(noxbeale2) <- colnames(noxbeale1)
-noxbeale <- rbind(noxbeale1, noxbeale2)
-
-
-# plotting estimation function uncertainty
-noxlibe <- merge(noxlinear, noxbeale, by.x="row.names", by.y = "hyear")
-
-noxtop <- ggplot(noxlibe, aes(x=as.factor(Row.names)))+
-  geom_col(aes(y=load.x/2000), fill = "wheat3")+
-  geom_point(aes(y = bealeload/1000, colour = as.factor(Biasfactor)), size=2)+
-  xlab("Hydrological year")+
-  ylab("NOx Load (kt/yr)")+
-  scale_colour_brewer("Beale's Bias Correction", palette="Dark2")+
-  theme_bw()+
-  guides(colour=FALSE)+
-  theme(axis.title.x = element_blank())
-
-noxmid <- ggplot(noxlibe, aes(x=as.factor(Row.names)))+
-  geom_point(aes(y = (bealeload/load.x), colour = as.factor(Biasfactor)),  size=2)+
-  geom_hline(yintercept=1, linetype="dashed") +
-  ylim (0,3)+
-  labs(y = "NOx Load Ratio (Beale/Linear)", x="Hydrological year")+
-  scale_colour_brewer("Beale's Bias Correction", palette="Dark2")+
-  theme_bw()+
-  theme(legend.position = c(0.8,0.8))+
-  guides(colour=FALSE)
-
-
-noxbot <- ggplot(noxlibe, aes(x=flow.x))+
-  geom_point(aes(y = (bealeload/load.x), colour = as.factor(Biasfactor)),  size=2)+
-  geom_hline(yintercept=1, linetype="dashed") +
-  ylim (0,3)+
-  labs(y = "NOx Load Ratio (Beale/Linear)", x="Annual Mean Hourly Flow (Cumecs)")+
-  scale_colour_brewer("Beale's Bias Correction", palette="Dark2")+
-  theme_bw()+
-  theme(legend.position = c(0.8,0.8))+
-  guides(colour=guide_legend(title="Bias Correction", ncol=2))
-
-grid.arrange(noxtop,  noxmid, noxbot, ncol=3, nrow=1)
 
 
 # Estimate and plot sample frequency uncertainty ----------------------------------------------------------

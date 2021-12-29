@@ -56,7 +56,7 @@ loadlinear <- function(flowconczoo, seconds){
 }
 
 
-loadunc <- function(flowconczoo, concunc, flowunc, concdf, minconc){
+loadunc <- function(flowconczoo, concunc, flowunc, concdf, minconc, covar=FALSE){
   conczoo <- read.zoo(concdf, header = TRUE, aggregate = mean)
   # Add tiedowns to the observed concentration data so as to enable interpolation
   concdfnew <- data.frame(Datetime = index(conczoo), conc = as.data.frame(conczoo)$conc)
@@ -66,60 +66,99 @@ loadunc <- function(flowconczoo, concunc, flowunc, concdf, minconc){
   
   df_temp <- as.data.frame(flowconczoo)
   flowcondf <- data.frame(Datetime=flowunc$Datetime, flow=df_temp$flow, conc=df_temp$conc)
+  flowcondf$loadraw <- flowcondf$flow * flowcondf$conc
   time_conc_sample = concdfnew$Datetime
+  sample_conc_length <- length(time_conc_sample)
   # assign initial values used for calculation
   flowcondf$slope = 1
   concunc$concuncsq <- concunc$concuncbound**2
-  flowunc <- mutate(flowunc, flowuncbound = flowuncbound**2)
   names(concdfnew) <- c('Datetime', 'conc')
   flowcondf$flowuncbound <- flowunc$flowuncbound # Assign values of flow uncertainty bounds
   flowcondf$concuncbound <- 0
-  flowcondf[flowcondf$Datetime == time_conc_sample[1],"concuncbound"] <- max(concunc$concuncsq)
+  flowcondf$conc_delta_i <- 0
+  flowcondf$conc_delta_i2 <- 0
+  flowcondf[flowcondf$Datetime == time_conc_sample[1],"concuncbound"] <- max(concunc$concuncbound)
+  flowcondf[flowcondf$Datetime == time_conc_sample[sample_conc_length], "concuncbound"] <- max(concunc$concuncbound)
+  flowcondf[flowcondf$Datetime == time_conc_sample[sample_conc_length], "conc_delta_i"] <-
+    concdfnew[concdfnew$Datetime == time_conc_sample[sample_conc_length], "conc"] * flowcondf[flowcondf$Datetime == time_conc_sample[sample_conc_length], "concuncbound"]
   
-  flowcondf[flowcondf$Datetime == time_conc_sample[length(time_conc_sample)], "concuncbound"] <- max(concunc$concuncsq)
+  flowcondf[flowcondf$Datetime == time_conc_sample[sample_conc_length], "conc_delta_i2"] <-
+    concdfnew[concdfnew$Datetime == time_conc_sample[sample_conc_length], "conc"] * flowcondf[flowcondf$Datetime == time_conc_sample[sample_conc_length], "concuncbound"]
   
-  for (i in 1:(length(time_conc_sample) - 1)){
+  
+  for (i in 1:(sample_conc_length - 1)){
     if (i> 1){
       
-      flowcondf[flowcondf$Datetime == time_conc_sample[i], "concuncbound"] <- mean(concunc[concunc$Datetime==time_conc_sample[i], "concuncsq"])
+      flowcondf[flowcondf$Datetime == time_conc_sample[i], "concuncbound"] <- mean(concunc[concunc$Datetime==time_conc_sample[i], "concuncbound"])
     }
   }
   
-  for (i in 1:(length(time_conc_sample) - 1)){
+  for (i in 1:(sample_conc_length - 1)){
     # If a data is obtained by interpolation, calculate the concentration uncertainty using the eq. in chapter 4.
     diff_time_sample <- as.integer(difftime(time_conc_sample[i + 1], time_conc_sample[i], units = 'hours'))
     
     if (diff_time_sample > 1){
-      for (k in 1:(diff_time_sample - 1)){
-        slope_interp = (diff_time_sample - k) / diff_time_sample
-        time_k = time_conc_sample[i] + hours(k)
-        flowcondf[flowcondf$Datetime == time_k, "slope"] <- slope_interp
-        conc_delta_i = concdfnew[concdfnew$Datetime == time_conc_sample[i], "conc"] * flowcondf[flowcondf$Datetime == time_conc_sample[i], "concuncbound"]
-        conc_delta_i2 = concdfnew[concdfnew$Datetime == time_conc_sample[i+1], "conc"] * flowcondf[flowcondf$Datetime == time_conc_sample[i+1], "concuncbound"]
-        conc_delta_k = (slope_interp*conc_delta_i)**2 + ((1 - slope_interp)*conc_delta_i2)**2
-        conc_k = flowcondf[flowcondf$Datetime == time_k, "conc"]
-        flowcondf[flowcondf$Datetime == time_k, "concuncbound"] <- conc_delta_k / conc_k**2
-      }
-      # END if
+      # browser()
+      t1_bool <- flowcondf$Datetime >= time_conc_sample[i]
+      t2_bool <- flowcondf$Datetime < time_conc_sample[i+1]
+      # # Vectorize the calculation to speed up
+      flowcondf[t1_bool & t2_bool, "slope"] <- c(seq(diff_time_sample, 1) / diff_time_sample)
+      flowcondf[t1_bool & t2_bool, "conc_delta_i"] <-
+        concdfnew[concdfnew$Datetime == time_conc_sample[i], "conc"] * flowcondf[flowcondf$Datetime == time_conc_sample[i], "concuncbound"]
+      
+      flowcondf[t1_bool & t2_bool, "conc_delta_i2"] <-
+        concdfnew[concdfnew$Datetime == time_conc_sample[i+1], "conc"] * flowcondf[flowcondf$Datetime == time_conc_sample[i+1], "concuncbound"]
     }
     # END if
   }
-  flowcondf$loaduncbound = sqrt(flowcondf$concuncbound + flowcondf$flowuncbound)
+  if (covar){
+    flowcondf[, "concuncbound"] <- ((flowcondf[, "slope"]*flowcondf[, "conc_delta_i"])** 2 + ((1 - flowcondf[, "slope"])*flowcondf[, "conc_delta_i2"])** 2)
+    flowcondf[, "concuncbound"] <- round(sqrt(flowcondf[, "concuncbound"]) / flowcondf[, "conc"], 3)
+    # The code in the line below calculate the square of load uncertainty at each time step without co-variance.
+    flowcondf$loadbase = flowcondf$loadraw
+    flowcondf$loaduncbound = (flowcondf$concuncbound + flowcondf$flowuncbound) * flowcondf$loadbase
+  } else {
+    flowcondf[, "concuncbound"] <- ((flowcondf[, "slope"]*flowcondf[, "conc_delta_i"])** 2 + ((1 - flowcondf[, "slope"])*flowcondf[, "conc_delta_i2"])** 2) / (flowcondf[, "conc"]**2)
+    # The code in the line below calculate the sqaure of load uncertainty at each time step without covariance.
+    flowcondf[, "concuncbound"] <- round(flowcondf[, "concuncbound"], 3)
+    flowcondf$loadbase = flowcondf$loadraw**2
+    flowcondf$loaduncbound = (flowcondf$concuncbound + flowcondf$flowuncbound ** 2) * flowcondf$loadbase
+  }
+  # End if
   return(flowcondf)
 }
 
+
+
+loaduncannual <- function(flowcondf){
+  loadunczoo <- read.zoo(flowcondf, header = TRUE)
+  
+  # aggregate to annual mean instant flow, concentration and load 
+  yearlyunc <- aggregate(loadunczoo, as.year(time(loadunczoo)), sum)
+  yearlyunc <- as.data.frame(yearlyunc)
+  yearlyunc <- yearlyunc[-1,] 
+  yearlyunc$loaduncbound <- round(yearlyunc$loaduncbound / yearlyunc$loadbase, 3)
+
+  return(yearlyunc)
+}
+
 # Use a function to call the linear interpolation related functions
-calloadunc <- function(flowdf, concdf, minconc, seconds, flowunc, concunc){
+calloadunc <- function(flowdf, concdf, minconc, seconds, flowunc, concunc, yearlyloadbase, covar, boundtype){
   flowconczoo <- conclinear(flowdf, concdf, minconc)
-  browser()
-  flowcondf <- loadunc(flowconczoo, concunc, flowunc, concdf, minconc)
-  flowconczoo$conc <- flowconczoo$conc * (1 + flowcondf$loaduncbound)
-  yearlyloadunc <- loadlinear(flowconczoo, seconds)
+  # browser()
+  flowcondf <- loadunc(flowconczoo, concunc, flowunc, concdf, minconc, covar)
+  yearlyloadunc <- loaduncannual(flowcondf)
+  if (boundtype == "upper"){
+    yearlyloadunc$load <- yearlyloadbase$load * (1 + yearlyloadunc$loaduncbound)
+  } else {
+    yearlyloadunc$load <- yearlyloadbase$load * (1 - yearlyloadunc$loaduncbound)
+    }
   
   return(yearlyloadunc)
 }
-### Random sampling functions for sample frequency analysis
 
+
+### Random sampling functions for sample frequency analysis
 # random sample n, repeat N times. concentration data
 randomall <- function(concdf, n, N){
   names(concdf) <- c("Datetime", "conc")
@@ -145,7 +184,7 @@ randomyear <- function(concdf, nprop, N){
 ### Estimating combined uncertainty with choice of random sample methods, data, and load estimation methods.
 ## Qian to change the settings of arguments and inside loop
 samplefreqfun <- function(flowdf, concdf, seconds,minconc, loadfun, biasfun, randomfun, 
-                          randomseeds, randomseedprop, randomtimes, flowunc, concunc){
+                          randomseeds, randomseedprop, randomtimes, flowunc, concunc, covar, boundtype){
   # get random samples
   if (randomfun == "randomall"){
     concsamplefreq <- randomall(concdf, randomseeds, randomtimes)
@@ -155,15 +194,21 @@ samplefreqfun <- function(flowdf, concdf, seconds,minconc, loadfun, biasfun, ran
   
   hyear <- as.year(flowdf$Datetime)
   
-  conclist <- list()
+  conclist <- data.frame(matrix(0, randomtimes, length(unique(hyear))), row.names = seq(1, randomtimes))
+  names(conclist) <- unique(hyear)
   
   if (loadfun == "linear"){
     for (i in (unique(concsamplefreq$Obs))){
       concsub <- subset(concsamplefreq, concsamplefreq$Obs == i)
       concsub <- as.data.frame(concsub[,c("Datetime", "conc")])
       # conclist[[i]] <- loadlinear(flowdf, concsub, seconds, minconc)
-      conclist[i] <- calloadunc(flowdf, concsub, minconc, seconds, flowunc, concunc) # Use Qian's new settings
-      conclist[[i]]$hyear <- unique(hyear) ## TODO
+      # Calculate the new base load with re-sampled concentration
+      # browser()
+      flowconcbase_temp <- conclinear(flowdf, concsub, minconc)
+      yearlyloadbase_temp <- loadlinear(flowconcbase_temp, seconds)
+      load_temp <- calloadunc(flowdf, concsub, minconc, seconds, flowunc, concunc, yearlyloadbase_temp, covar, boundtype) # Use Qian's new settings
+      conclist[i, ] <- load_temp$load
+      # conclist[[i]]$hyear <- unique(hyear) ## TODO
     }
   } else if (loadfun == "beale"){
     for (i in (unique(concsamplefreq$Obs))){
@@ -174,13 +219,13 @@ samplefreqfun <- function(flowdf, concdf, seconds,minconc, loadfun, biasfun, ran
     }
   }
   
-  concsampleall <- bind_rows(conclist, .id = "samples")
-  
-  concsampleminmax <- concsampleall %>%
-    group_by(hyear, flow) %>%
-    dplyr::summarise(across(.cols = c("load"),list (min = min, max = max), na.rm=TRUE))
-  
-  return(concsampleminmax)
+  # concsampleall <- bind_rows(conclist, .id = "samples")
+  # browser()
+  # concsampleminmax <- concsampleall %>%
+  #   group_by(hyear, flow) %>%
+  #   dplyr::summarise(across(.cols = c("load"),list (min = min, max = max), na.rm=TRUE))
+  # 
+  return(conclist)
   
 }
 
@@ -204,26 +249,8 @@ flowunc <- flow
 flowunc$flowuncbound <- 0
   
 # create flow upper bounds and lower bounds data
-flowup <- mutate(flow, flow = case_when(
-  QC == 9 ~ flow*1.05,
-  QC == 10 ~ flow*1.1,
-  QC == 20 ~ flow*1.2,
-  QC == 30 ~ flow*1.5,
-  QC == 60 ~ flow*1.75,
-  TRUE ~ flow))
-
-flowlow <- mutate(flow, flow = case_when(
-  QC == 9 ~ flow*0.95,
-  QC == 10 ~ flow*0.9,
-  QC == 20 ~ flow*0.8,
-  QC == 30 ~ flow*0.5,
-  QC == 60 ~ flow*0.25,
-  TRUE ~ flow))
-
 flowqc <- flow
 flow <- flow[,-3]
-flowup <- flowup[,-3]
-flowlow <- flowlow[,-3]
 
 # create flow upper bounds and lower bounds data
 flowuncup <- mutate(flowunc, flowuncbound = case_when(
@@ -275,6 +302,8 @@ conc$Lab <- "All"
 # create separate TSS and Nox concentration data
 nox <- conc[,c(-3, -4)]
 din <- conc[,c(-2, -3)]
+dinraw <- din[, c(1, 2)]
+nhraw <- conc[, c(1, 3)]
 
 ## convert days in category conditions
 thresholds <- read.csv("time thresholds.csv")
@@ -367,24 +396,14 @@ names(noxunclow)<-c('Datetime', 'concuncbound')
 noxraw <- mutate(noxcomb, NOx=NOx)[,c(1:2)] ##remove extra column to keep just datetime and nox.
 names(noxraw)<-c('Datetime', 'concuncbound')
 
-
-
 ## setting other input data
 yearlyseconds <- c(31532400,31532400,31618800,31532400,31532400,31532400,31618800,31532400,31532400)
 
 MinNH4 = 0.002
 MinNOx = 0.001
+MinDIN = MinNH4 + MinNOx
 
 
-# # test functions
-# flowconczoo <- conclinear(flow, noxraw, MinNOx)
-# # yearlyload <- loadlinear(flowconczoo, yearlyseconds)
-# flowcondf <- loadunc(flowconczoo, noxuncup, flowuncup, noxraw, MinNOx)
-# # Add the uncertainty to concentration and calculate the load uncertainty using loadlinear() accordingly
-# flowconczoo$conc <- flowconczoo$conc * (1 + flowcondf$loaduncbound)
-# yearlyloadup <- loadlinear(flowconczoo, yearlyseconds)
-# 
-# yearlyloadup <- calloadunc(flow, noxraw, MinNOx, yearlyseconds, flowuncup, noxuncup)
 # ### scenarios data
 
 # Different unc scenarios of flow and concentration
@@ -393,17 +412,62 @@ MinNOx = 0.001
 
 # Estimate and plot combined uncertainty -----------------------------------------------------------
 
-## generating combined uncertainty
+## generating combined uncertainty for upper bound
+noxmixlow <- samplefreqfun(flowdf = flow, concdf = noxraw, seconds = yearlyseconds, minconc = MinNOx,
+                           loadfun = "linear",  biasfun = 1, randomfun = "randomyear", randomseedprop = 1.0,
+                           randomseeds = 10, randomtimes = 2, flowunc = flowunclow, concunc = noxunclow,
+                           covar = FALSE, boundtype = "lower")
 
-noxmixup <- samplefreqfun(flowdf = flow, concdf = noxraw, seconds = yearlyseconds, minconc = MinNOx, 
-                          loadfun = "linear",  biasfun = 1, randomfun = "randomyear", randomseedprop = 0.7, 
-                          randomseeds = 10, randomtimes = 2, flowunc = flowuncup, concunc = noxuncup)
+write.csv(noxmixlow, 'output/noxmixlow_nocovar_100.csv')
 
-# noxmixlow <- samplefreqfun(flowdf = flow, concdf = noxraw, seconds = yearlyseconds, minconc = MinNOx, 
-#                            loadfun = "linear",  biasfun = 1, randomfun = "randomyear", randomseedprop = 0.7, 
-#                            randomseeds = 10, randomtimes = 2,flowunc = flowunclow, concunc = noxunclow)
-# 
-# 
+noxmixlowcovar <- samplefreqfun(flowdf = flow, concdf = noxraw, seconds = yearlyseconds, minconc = MinNOx,
+                                      loadfun = "linear",  biasfun = 1, randomfun = "randomyear", randomseedprop = 1.0,
+                                      randomseeds = 10, randomtimes = 2, flowunc = flowunclow,
+                                      concunc = noxunclow, covar = TRUE, boundtype = "lower")
+write.csv(noxmixlowcovar, 'output/noxmixlow_covar_100.csv')
+
+noxmixup <- samplefreqfun(flowdf = flow, concdf = noxraw, seconds = yearlyseconds, minconc = MinNOx,
+                           loadfun = "linear",  biasfun = 1, randomfun = "randomyear", randomseedprop = 1.0,
+                           randomseeds = 10, randomtimes = 2, flowunc = flowuncup, concunc = noxuncup,
+                           covar = FALSE, boundtype = "upper")
+
+write.csv(noxmixup, 'output/noxmixup_nocovar_100.csv')
+
+noxmixupcovar <- samplefreqfun(flowdf = flow, concdf = noxraw, seconds = yearlyseconds, minconc = MinNOx,
+                                loadfun = "linear",  biasfun = 1, randomfun = "randomyear", randomseedprop = 1.0,
+                                randomseeds = 10, randomtimes = 2, flowunc = flowuncup,
+                                concunc = noxuncup, covar = TRUE, boundtype = "upper")
+write.csv(noxmixupcovar, 'output/noxmixup_covar_100.csv')
+
+## generating combined uncertainty for lower bound for din
+dinmixlow <- samplefreqfun(flowdf = flow, concdf = dinraw, seconds = yearlyseconds, minconc = MinDIN,
+                                      loadfun = "linear",  biasfun = 1, randomfun = "randomyear", randomseedprop = 1.0,
+                                      randomseeds = 10, randomtimes = 2, flowunc = flowunclow,
+                                      concunc = noxunclow, covar = FALSE, boundtype = "lower")
+
+write.csv(dinmixlow, 'output/dinmixlow_nocovar_100.csv')
+
+dinmixlowcovar <- samplefreqfun(flowdf = flow, concdf = dinraw, seconds = yearlyseconds, minconc = MinDIN,
+                                           loadfun = "linear",  biasfun = 1, randomfun = "randomyear", randomseedprop = 1.0,
+                                           randomseeds = 10, randomtimes = 2, flowunc = flowunclow,
+                                           concunc = noxunclow, covar = TRUE, boundtype = "lower")
+write.csv(dinmixlowcovar, 'output/dinmixlow_covar_100.csv')
+
+## generating combined uncertainty for upper bound for din
+dinmixup <- samplefreqfun(flowdf = flow, concdf = dinraw, seconds = yearlyseconds, minconc = MinDIN, 
+                           loadfun = "linear",  biasfun = 1, randomfun = "randomyear", randomseedprop = 1.0, 
+                           randomseeds = 10, randomtimes = 2, flowunc = flowuncup, 
+                           concunc = noxuncup, covar = FALSE, boundtype = "upper")
+
+write.csv(dinmixup, 'output/dinmixup_nocovar_100.csv')
+
+dinmixupcovar <- samplefreqfun(flowdf = flow, concdf = dinraw, seconds = yearlyseconds, minconc = MinDIN,
+                                loadfun = "linear",  biasfun = 1, randomfun = "randomyear", randomseedprop = 1.0,
+                                randomseeds = 10, randomtimes = 2, flowunc = flowuncup,
+                                concunc = noxuncup, covar = TRUE, boundtype = "upper")
+write.csv(dinmixupcovar, 'output/dinmixup_covar_100.csv')
+
+
 # 
 # noxmix <- loadlinear(flow, noxcomb, yearlyseconds, MinNOx)
 # noxmix$noxuploadmax <- noxmixup$load_max
@@ -435,6 +499,3 @@ noxmixup <- samplefreqfun(flowdf = flow, concdf = noxraw, seconds = yearlysecond
 #   theme_bw()
 # 
 # grid.arrange(noxtop, noxmid, ncol=2, nrow=1)
-
-
-

@@ -16,7 +16,7 @@ restart estimation
 all_params relative 0.015 0.000 switch 2.0 parabolic
 * parameter data
 ya	log     factor	50	0.00001	100	all_params	1	0
-yb	fixed     factor	30	0.00001	100	all_params	1	0
+yb	fixed     factor	50	0.00001	100	all_params	1	0
 * observation groups
 obs_1
 obs_2 

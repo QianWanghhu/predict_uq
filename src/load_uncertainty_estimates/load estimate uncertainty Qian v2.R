@@ -45,7 +45,7 @@ loadlinear <- function(flowconczoo, seconds){
   # hourly load, mg/L * m3/s = g/s
   flowconczoo$load <- flowconczoo$conc*flowconczoo$flow
   
-  # aggregate to annual mean instant flow, concentration and load 
+  aggregate to annual mean instant flow, concentration and load
   yearly <- aggregate(flowconczoo, as.year(time(flowconczoo)), mean)
   yearly <- as.data.frame(yearly)
   yearly <- yearly[-1,]  # removed the first first row (10 data points, i.e. 10 hours) due to unresolved issue on timezone
@@ -77,13 +77,15 @@ loadunc <- function(flowconczoo, concunc, flowunc, concdf, minconc, covar=FALSE)
   flowcondf$concuncbound <- 0
   flowcondf$conc_delta_i <- 0
   flowcondf$conc_delta_i2 <- 0
+  time_end <- time_conc_sample[sample_conc_length]
+  flow_time_end_bool <- flowcondf$Datetime == time_end
   flowcondf[flowcondf$Datetime == time_conc_sample[1],"concuncbound"] <- max(concunc$concuncbound)
-  flowcondf[flowcondf$Datetime == time_conc_sample[sample_conc_length], "concuncbound"] <- max(concunc$concuncbound)
-  flowcondf[flowcondf$Datetime == time_conc_sample[sample_conc_length], "conc_delta_i"] <-
-    concdfnew[concdfnew$Datetime == time_conc_sample[sample_conc_length], "conc"] * flowcondf[flowcondf$Datetime == time_conc_sample[sample_conc_length], "concuncbound"]
+  flowcondf[flow_time_end_bool, "concuncbound"] <- max(concunc$concuncbound)
+  flowcondf[flow_time_end_bool, "conc_delta_i"] <-
+    concdfnew[concdfnew$Datetime == time_end, "conc"] * flowcondf[flow_time_end_bool, "concuncbound"]
   
-  flowcondf[flowcondf$Datetime == time_conc_sample[sample_conc_length], "conc_delta_i2"] <-
-    concdfnew[concdfnew$Datetime == time_conc_sample[sample_conc_length], "conc"] * flowcondf[flowcondf$Datetime == time_conc_sample[sample_conc_length], "concuncbound"]
+  flowcondf[flow_time_end_bool, "conc_delta_i2"] <-
+    concdfnew[concdfnew$Datetime == time_end, "conc"] * flowcondf[flow_time_end_bool, "concuncbound"]
   
   
   for (i in 1:(sample_conc_length - 1)){
@@ -413,62 +415,61 @@ MinDIN = MinNH4 + MinNOx
 # Estimate and plot combined uncertainty -----------------------------------------------------------
 
 ## generating combined uncertainty for upper bound
-noxmixlow <- samplefreqfun(flowdf = flow, concdf = noxraw, seconds = yearlyseconds, minconc = MinNOx,
-                           loadfun = "linear",  biasfun = 1, randomfun = "randomyear", randomseedprop = 1.0,
-                           randomseeds = 10, randomtimes = 2, flowunc = flowunclow, concunc = noxunclow,
-                           covar = FALSE, boundtype = "lower")
+# noxmixlow <- samplefreqfun(flowdf = flow, concdf = noxraw, seconds = yearlyseconds, minconc = MinNOx,
+#                            loadfun = "linear",  biasfun = 1, randomfun = "randomyear", randomseedprop = 1.0,
+#                            randomseeds = 10, randomtimes = 2, flowunc = flowunclow, concunc = noxunclow,
+#                            covar = FALSE, boundtype = "lower")
 
-write.csv(noxmixlow, 'output/noxmixlow_nocovar_100.csv')
+# write.csv(noxmixlow, 'output/noxmixlow_nocovar_100.csv')
 
 noxmixlowcovar <- samplefreqfun(flowdf = flow, concdf = noxraw, seconds = yearlyseconds, minconc = MinNOx,
-                                      loadfun = "linear",  biasfun = 1, randomfun = "randomyear", randomseedprop = 1.0,
-                                      randomseeds = 10, randomtimes = 2, flowunc = flowunclow,
+                                      loadfun = "linear",  biasfun = 1, randomfun = "randomyear", randomseedprop = 0.7,
+                                      randomseeds = 10, randomtimes = 1000, flowunc = flowunclow,
                                       concunc = noxunclow, covar = TRUE, boundtype = "lower")
-write.csv(noxmixlowcovar, 'output/noxmixlow_covar_100.csv')
+write.csv(noxmixlowcovar, 'output/noxmixlow_covar_70.csv')
 
-noxmixup <- samplefreqfun(flowdf = flow, concdf = noxraw, seconds = yearlyseconds, minconc = MinNOx,
-                           loadfun = "linear",  biasfun = 1, randomfun = "randomyear", randomseedprop = 1.0,
-                           randomseeds = 10, randomtimes = 2, flowunc = flowuncup, concunc = noxuncup,
-                           covar = FALSE, boundtype = "upper")
-
-write.csv(noxmixup, 'output/noxmixup_nocovar_100.csv')
+# noxmixup <- samplefreqfun(flowdf = flow, concdf = noxraw, seconds = yearlyseconds, minconc = MinNOx,
+#                            loadfun = "linear",  biasfun = 1, randomfun = "randomyear", randomseedprop = 1.0,
+#                            randomseeds = 10, randomtimes = 2, flowunc = flowuncup, concunc = noxuncup,
+#                            covar = FALSE, boundtype = "upper")
+# 
+# write.csv(noxmixup, 'output/noxmixup_nocovar_100.csv')
 
 noxmixupcovar <- samplefreqfun(flowdf = flow, concdf = noxraw, seconds = yearlyseconds, minconc = MinNOx,
-                                loadfun = "linear",  biasfun = 1, randomfun = "randomyear", randomseedprop = 1.0,
-                                randomseeds = 10, randomtimes = 2, flowunc = flowuncup,
+                                loadfun = "linear",  biasfun = 1, randomfun = "randomyear", randomseedprop = 0.7,
+                                randomseeds = 10, randomtimes = 1000, flowunc = flowuncup,
                                 concunc = noxuncup, covar = TRUE, boundtype = "upper")
-write.csv(noxmixupcovar, 'output/noxmixup_covar_100.csv')
+write.csv(noxmixupcovar, 'output/noxmixup_covar_70.csv')
 
-## generating combined uncertainty for lower bound for din
-dinmixlow <- samplefreqfun(flowdf = flow, concdf = dinraw, seconds = yearlyseconds, minconc = MinDIN,
-                                      loadfun = "linear",  biasfun = 1, randomfun = "randomyear", randomseedprop = 1.0,
-                                      randomseeds = 10, randomtimes = 2, flowunc = flowunclow,
-                                      concunc = noxunclow, covar = FALSE, boundtype = "lower")
-
-write.csv(dinmixlow, 'output/dinmixlow_nocovar_100.csv')
+# ## generating combined uncertainty for lower bound for din
+# dinmixlow <- samplefreqfun(flowdf = flow, concdf = dinraw, seconds = yearlyseconds, minconc = MinDIN,
+#                                       loadfun = "linear",  biasfun = 1, randomfun = "randomyear", randomseedprop = 1.0,
+#                                       randomseeds = 10, randomtimes = 2, flowunc = flowunclow,
+#                                       concunc = noxunclow, covar = FALSE, boundtype = "lower")
+# 
+# write.csv(dinmixlow, 'output/dinmixlow_nocovar_100.csv')
 
 dinmixlowcovar <- samplefreqfun(flowdf = flow, concdf = dinraw, seconds = yearlyseconds, minconc = MinDIN,
-                                           loadfun = "linear",  biasfun = 1, randomfun = "randomyear", randomseedprop = 1.0,
-                                           randomseeds = 10, randomtimes = 2, flowunc = flowunclow,
+                                           loadfun = "linear",  biasfun = 1, randomfun = "randomyear", randomseedprop = 0.7,
+                                           randomseeds = 10, randomtimes = 1000, flowunc = flowunclow,
                                            concunc = noxunclow, covar = TRUE, boundtype = "lower")
-write.csv(dinmixlowcovar, 'output/dinmixlow_covar_100.csv')
+write.csv(dinmixlowcovar, 'output/dinmixlow_covar_70.csv')
 
 ## generating combined uncertainty for upper bound for din
-dinmixup <- samplefreqfun(flowdf = flow, concdf = dinraw, seconds = yearlyseconds, minconc = MinDIN, 
-                           loadfun = "linear",  biasfun = 1, randomfun = "randomyear", randomseedprop = 1.0, 
-                           randomseeds = 10, randomtimes = 2, flowunc = flowuncup, 
-                           concunc = noxuncup, covar = FALSE, boundtype = "upper")
-
-write.csv(dinmixup, 'output/dinmixup_nocovar_100.csv')
+# dinmixup <- samplefreqfun(flowdf = flow, concdf = dinraw, seconds = yearlyseconds, minconc = MinDIN, 
+#                            loadfun = "linear",  biasfun = 1, randomfun = "randomyear", randomseedprop = 1.0, 
+#                            randomseeds = 10, randomtimes = 2, flowunc = flowuncup, 
+#                            concunc = noxuncup, covar = FALSE, boundtype = "upper")
+# 
+# write.csv(dinmixup, 'output/dinmixup_nocovar_100.csv')
 
 dinmixupcovar <- samplefreqfun(flowdf = flow, concdf = dinraw, seconds = yearlyseconds, minconc = MinDIN,
-                                loadfun = "linear",  biasfun = 1, randomfun = "randomyear", randomseedprop = 1.0,
-                                randomseeds = 10, randomtimes = 2, flowunc = flowuncup,
+                                loadfun = "linear",  biasfun = 1, randomfun = "randomyear", randomseedprop = 0.7,
+                                randomseeds = 10, randomtimes = 1000, flowunc = flowuncup,
                                 concunc = noxuncup, covar = TRUE, boundtype = "upper")
-write.csv(dinmixupcovar, 'output/dinmixup_covar_100.csv')
+write.csv(dinmixupcovar, 'output/dinmixup_covar_70.csv')
 
-
-# 
+ 
 # noxmix <- loadlinear(flow, noxcomb, yearlyseconds, MinNOx)
 # noxmix$noxuploadmax <- noxmixup$load_max
 # noxmix$noxuploadmin <- noxmixup$load_min

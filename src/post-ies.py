@@ -141,12 +141,13 @@ import math
 file_date = '20220109'
 fpath = f'../output/work_run_{file_date}/'
 fn = '126001A.14.obs.csv'
+fn_pars = '126001A.11.par.csv'
 fn_meas = '126001A.base.obs.csv'
 log_load = False
 
 df = pd.read_csv(fpath + fn, index_col = 'real_name')
+df_pars = pd.read_csv(fpath + fn_pars, index_col = 'real_name')
 # select results of which the pbias is with 15%
-# df = df[(df.din_pbias < 15) & (df.din_pbias > -15)]
 df_meas = pd.read_csv(fpath + fn_meas, index_col = 'real_name')
 if log_load:
     df_meas.loc[:, 'din_2009':] = df_meas.loc[:, 'din_2009':].applymap(math.exp)
@@ -159,7 +160,7 @@ obs_annual = [52.093, 99.478, 44.064, 57.936, 53.449, 21.858, 38.561, 51.843, 14
 obs_annual.append(np.round(np.mean(obs_annual), 2))
 obs_df = pd.DataFrame(data=obs_annual, index = [*np.arange(2009, 2018), 'average'], columns=['Annual loads'])
 
-quantiles = [0.025, 0.975]
+quantiles = [0.05, 0.95]
 awi, awi_annual = average_width(df_meas.values[:, 1:10], df.values[:, 1:10], \
     quantile_bool=True, quantiles = quantiles)
 iss = average_interval_skill_score(df_meas.values[:, 1:10], df.values[:, 1:10], \
@@ -179,11 +180,9 @@ for i in range(9):
 metric = pd.DataFrame(index=obs_df.index[:-1], \
     columns=['Coverage ratio', 'Discrimination diagram', 'Median absolute deviation', 'Width index'], \
         data=np.array([cr_vals, dd_vals, mad_vals, awi_annual]).T)
-metric.to_csv(fpath+'metric.csv')
-# import spotpy
-# pbias_list = np.zeros(shape=100)
-# for i in range(100):
-#     pbias_list[i] = spotpy.objectivefunctions.pbias(df_meas.values[i, 1:10], df.values[i, 1:10])
+# metric.to_csv(fpath+'metric.csv')
+
+##-----------------Check the residuals with weights------------------##
 weight = np.array([0.1, 0.024, 0.013, 0.033, 0.020, 0.025, 0.091, 0.053, 0.037, 0.129])
 weight2 = np.array([0.15, 0.03, 0.03, 0.03, 0.03, 0.03, 0.03, 0.03, 0.03, 0.03])
 resd = (df_meas - df)
@@ -193,3 +192,14 @@ lsq.sum(axis=1).mean()
 lsq.sum(axis=1).std()
 lsq.sum(axis=1).max()
 lsq.sum(axis=1).min()
+
+
+import spotpy
+df_temp  = df_meas.copy(deep=True)
+for i in range(9):
+    df_temp.loc[:, cols[i+1]] = 10**(df_meas.loc[:, cols[i+1]])
+
+for i in df_temp.index:
+    df_meas.loc[i, 'din_pbias'] = spotpy.objectivefunctions.pbias(obs_df.iloc[0:9, :].values.flatten(), df_temp.loc[i, 'din_2009':'din_2017'].values)
+
+df_meas.to_csv('measurement_ensemble_log.csv')

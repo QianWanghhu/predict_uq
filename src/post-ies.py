@@ -138,9 +138,9 @@ import pandas as pd
 import math
 
 # import the annual loads
-file_date = '20220109'
+file_date = '20220114'
 fpath = f'../output/work_run_{file_date}/'
-fn = '126001A.14.obs.csv'
+fn = '126001A.15.obs.csv'
 fn_pars = '126001A.11.par.csv'
 fn_meas = '126001A.base.obs.csv'
 log_load = False
@@ -150,8 +150,8 @@ df_pars = pd.read_csv(fpath + fn_pars, index_col = 'real_name')
 # select results of which the pbias is with 15%
 df_meas = pd.read_csv(fpath + fn_meas, index_col = 'real_name')
 if log_load:
-    df_meas.loc[:, 'din_2009':] = df_meas.loc[:, 'din_2009':].applymap(math.exp)
-    df.loc[:, 'din_2009':] = df.loc[:, 'din_2009':].applymap(math.exp)
+    df_meas.loc[:, 'din_2009':] = 10**(df_meas.loc[:, 'din_2009':])
+    df.loc[:, 'din_2009':] = 10**(df.loc[:, 'din_2009':])
 df['average'] = df.loc[:, 'din_2009':'din_2017'].mean(axis=1).values
 df_meas['average'] = df_meas.loc[:, 'din_2009':'din_2017'].mean(axis=1).values
 
@@ -183,7 +183,7 @@ metric = pd.DataFrame(index=obs_df.index[:-1], \
 # metric.to_csv(fpath+'metric.csv')
 
 ##-----------------Check the residuals with weights------------------##
-weight = np.array([0.1, 0.024, 0.013, 0.033, 0.020, 0.025, 0.091, 0.053, 0.037, 0.129])
+weight = np.array([0.1, 11.13, 11.13, 11.13, 11.13, 11.13, 11.13, 11.13, 11.13, 11.13])
 weight2 = np.array([0.15, 0.03, 0.03, 0.03, 0.03, 0.03, 0.03, 0.03, 0.03, 0.03])
 resd = (df_meas - df)
 lsq = (resd.loc[:, 'din_pbias':'din_2017']*weight)**2
@@ -195,11 +195,11 @@ lsq.sum(axis=1).min()
 
 
 import spotpy
-df_temp  = df_meas.copy(deep=True)
-for i in range(9):
-    df_temp.loc[:, cols[i+1]] = 10**(df_meas.loc[:, cols[i+1]])
+# df_temp  = df_meas.copy(deep=True)
+# for i in range(9):
+#     df_temp.loc[:, cols[i+1]] = 10**(df_meas.loc[:, cols[i+1]])
 
-for i in df_temp.index:
-    df_meas.loc[i, 'din_pbias'] = spotpy.objectivefunctions.pbias(obs_df.iloc[0:9, :].values.flatten(), df_temp.loc[i, 'din_2009':'din_2017'].values)
+# for i in df_temp.index:
+#     df_meas.loc[i, 'din_pbias'] = spotpy.objectivefunctions.pbias(obs_df.iloc[0:9, :].values.flatten(), df_temp.loc[i, 'din_2009':'din_2017'].values)
 
-df_meas.to_csv('measurement_ensemble_log.csv')
+# df_meas.to_csv('measurement_ensemble_log.csv')

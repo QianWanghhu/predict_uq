@@ -119,7 +119,7 @@ def plot_xy(ident=True):
     #     cmap=plt.get_cmap('rainbow'))  # 设置颜色映射
         axes[i].set_xlabel(r'$x_{1}$')
         axes[i].set_ylabel(r'$x_{2}$')
-        axes[i].set_title(r'$\hat{d_%i}$'%(i + 1))
+        axes[i].set_title(r'$\hat{O_%i}$'%(i + 1))
         axes[i].set_xlim(0, 1)
         axes[i].set_ylim(0, 1)
         plt.colorbar(pp, ax=axes[i])

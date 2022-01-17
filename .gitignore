@@ -34,3 +34,23 @@ src/notebooks/.ipynb_checkpoints/
 predict_uq_output.zip
 
 src/predict_uq_src.zip
+
+src/load_uncertainty_estimates/126001A_concentrations_conditions.csv
+
+src/load_uncertainty_estimates/126001A_din_concentrations_conditions.csv
+
+src/load_uncertainty_estimates/126001A_flows.csv
+
+src/load_uncertainty_estimates/condition uc bounds.csv
+
+src/load_uncertainty_estimates/DSITI GBRI5 WQ Report_Results final 2017_18_V2.xlsx
+
+src/load_uncertainty_estimates/flow unc bounds Qian.csv
+
+src/load_uncertainty_estimates/time thresholds.csv
+
+src/2D-example/0107/
+
+src/2D-example/_use_results/
+
+src/load_uncertainty_estimates/na lookup.csv

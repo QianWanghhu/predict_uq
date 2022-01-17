@@ -6,7 +6,7 @@ restart estimation
 10.0 -2.0 0.3 0.01 10
 10.0 10.0 0.001
 0.1
-   50  0.005 4 4 0.005 4
+   50  0.0005 4 4 0.005 4
 0 0 0
 * singular value decomposition
 1
@@ -16,19 +16,20 @@ restart estimation
 all_params relative 0.015 0.000 switch 2.0 parabolic
 * parameter data
 ya	log     factor	50	0.00001	100	all_params	1	0
-yb	fixed     factor	50	0.00001	100	all_params	1	0
+yb	log     factor	50	0.00001	100	all_params	1	0
 * observation groups
 obs_1
 obs_2 
 * observation data
-obs_1 1.000 2 obs_1
-obs_2 0.000 1 obs_2
+obs_1 1.00 2 obs_1
+obs_2 0.00 1 obs_2
 * model command line
 python example_func.py
 * model input/output
 example_parameters.tpl parameters.csv
 example_output.ins example_output.txt
 ++ies_num_reals(3)
+++ies_observation_ensemble(example_ensemble.csv)
 ++overdue_giveup_minutes(20.0)
 ++ies_add_base(False)
 ++ies_lambda_mults(0.1,1.0,10) 

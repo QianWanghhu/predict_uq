@@ -6,7 +6,7 @@ import numpy as np
 
 parent_dir = os.getcwd()  
 job_name = 'work'
-num_copies = 3
+num_copies = 6
 pest_path= parent_dir + '\\pest_source' 
 print('pest path ',pest_path) 
 
@@ -24,7 +24,7 @@ instruction_file = 'example_output.ins'
 template_file = 'example_parameters.tpl'
 pst_file = 'example.pst'
 
-supp_files = ['example_func.py']
+supp_files = ['example_func.py', 'example_ensemble.csv']
             
 parent_dir = os.getcwd()
 os.makedirs(job_name,exist_ok=True)

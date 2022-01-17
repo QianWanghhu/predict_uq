@@ -138,9 +138,9 @@ import pandas as pd
 import math
 
 # import the annual loads
-file_date = '20220114'
+file_date = '20220116'
 fpath = f'../output/work_run_{file_date}/'
-fn = '126001A.15.obs.csv'
+fn = '126001A.3.obs.csv'
 fn_pars = '126001A.11.par.csv'
 fn_meas = '126001A.base.obs.csv'
 log_load = False
@@ -158,9 +158,9 @@ df_meas['average'] = df_meas.loc[:, 'din_2009':'din_2017'].mean(axis=1).values
 # obs data
 obs_annual = [52.093, 99.478, 44.064, 57.936, 53.449, 21.858, 38.561, 51.843, 14.176]
 obs_annual.append(np.round(np.mean(obs_annual), 2))
-obs_df = pd.DataFrame(data=obs_annual, index = [*np.arange(2009, 2018), 'average'], columns=['Annual loads'])
+obs_df = pd.DataFrame(data=np.log10(obs_annual), index = [*np.arange(2009, 2018), 'average'], columns=['Annual loads'])
 
-quantiles = [0.05, 0.95]
+quantiles = [0.025, 0.975]
 awi, awi_annual = average_width(df_meas.values[:, 1:10], df.values[:, 1:10], \
     quantile_bool=True, quantiles = quantiles)
 iss = average_interval_skill_score(df_meas.values[:, 1:10], df.values[:, 1:10], \
@@ -200,6 +200,6 @@ import spotpy
 #     df_temp.loc[:, cols[i+1]] = 10**(df_meas.loc[:, cols[i+1]])
 
 # for i in df_temp.index:
-#     df_meas.loc[i, 'din_pbias'] = spotpy.objectivefunctions.pbias(obs_df.iloc[0:9, :].values.flatten(), df_temp.loc[i, 'din_2009':'din_2017'].values)
+#     df_meas.loc[i, 'din_pbias'] = spotpy.objectivefunctions.pbias(10**(obs_df.iloc[0:9, :].values.flatten()), df_temp.loc[i, 'din_2009':'din_2017'].values)
 
 # df_meas.to_csv('measurement_ensemble_log.csv')

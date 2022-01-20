@@ -18,8 +18,9 @@ def non_identifiable_example(x):
     assert x.shape[0], "The first dimension of x should be 2 being equale to the number of parameters."
     # x = 4 * x - 2
     # vals = ((1 - (x[0, :] + x[1, :])) ** 2 + 25 * (x[0, :] + x[1, :]) ** 2)[:, np.newaxis]
-    vals = np.zeros(shape=(1, x.shape[1]))
+    vals = np.zeros(shape=(2, x.shape[1]))
     vals[0] = 4 * x[0] - 2 + 4 * x[1] - 2
+    vals[1] = 0.9 * (4 * x[0] - 2 + 4 * x[1] - 2)
     return vals
 
 def wrap_function(ident):

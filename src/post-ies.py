@@ -138,9 +138,9 @@ import pandas as pd
 import math
 
 # import the annual loads
-file_date = '20220116'
+file_date = '20220119'
 fpath = f'../output/work_run_{file_date}/'
-fn = '126001A.3.obs.csv'
+fn = '126001A.11.obs.csv'
 fn_pars = '126001A.11.par.csv'
 fn_meas = '126001A.base.obs.csv'
 log_load = False
@@ -154,13 +154,13 @@ if log_load:
     df.loc[:, 'din_2009':] = 10**(df.loc[:, 'din_2009':])
 df['average'] = df.loc[:, 'din_2009':'din_2017'].mean(axis=1).values
 df_meas['average'] = df_meas.loc[:, 'din_2009':'din_2017'].mean(axis=1).values
-
+df_meas = df_meas.loc[df.index, :]
 # obs data
 obs_annual = [52.093, 99.478, 44.064, 57.936, 53.449, 21.858, 38.561, 51.843, 14.176]
 obs_annual.append(np.round(np.mean(obs_annual), 2))
 obs_df = pd.DataFrame(data=np.log10(obs_annual), index = [*np.arange(2009, 2018), 'average'], columns=['Annual loads'])
 
-quantiles = [0.025, 0.975]
+quantiles = [0.05, 0.95]
 awi, awi_annual = average_width(df_meas.values[:, 1:10], df.values[:, 1:10], \
     quantile_bool=True, quantiles = quantiles)
 iss = average_interval_skill_score(df_meas.values[:, 1:10], df.values[:, 1:10], \
@@ -183,7 +183,7 @@ metric = pd.DataFrame(index=obs_df.index[:-1], \
 # metric.to_csv(fpath+'metric.csv')
 
 ##-----------------Check the residuals with weights------------------##
-weight = np.array([0.1, 11.13, 11.13, 11.13, 11.13, 11.13, 11.13, 11.13, 11.13, 11.13])
+weight = np.array([0.01, 11.13, 11.13, 11.13, 11.13, 11.13, 11.13, 11.13, 11.13, 11.13])
 weight2 = np.array([0.15, 0.03, 0.03, 0.03, 0.03, 0.03, 0.03, 0.03, 0.03, 0.03])
 resd = (df_meas - df)
 lsq = (resd.loc[:, 'din_pbias':'din_2017']*weight)**2

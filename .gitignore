@@ -54,3 +54,9 @@ src/2D-example/0107/
 src/2D-example/_use_results/
 
 src/load_uncertainty_estimates/na lookup.csv
+
+src/2D-example/figs/
+
+src/2D-example/0119/
+
+src/2D-example/__pycache__/

@@ -24,7 +24,7 @@ instruction_file = 'example_output.ins'
 template_file = 'example_parameters.tpl'
 pst_file = 'example.pst'
 
-supp_files = ['example_func.py', 'example_ensemble.csv']
+supp_files = ['example_func.py', 'example_ensemble.csv', 'parameter_ensemble.csv']
             
 parent_dir = os.getcwd()
 os.makedirs(job_name,exist_ok=True)

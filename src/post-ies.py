@@ -1,5 +1,5 @@
 #! usr/bin/env python
-
+from copy import deepcopy
 import numpy as np
 from numpy.lib import quantile
 import pandas as pd
@@ -108,31 +108,54 @@ def pred_uncertainty(obs_ensemble, x_pred):
     return total_uncertainty
 
 
-def inter_qunatile_range(param_value, x_range, quantiles):
+def inter_qunatile_range(param_value, quantiles):
     """
     Using all the parameter values.
     """
-    param_quantile = np.quantile(param_value, quantiles, axis=0) / x_range
-    return param_quantile
+    param_quantiles = np.quantile(param_value, quantiles, axis=0)
+    iqr = []
+    for ii in range(param_value.shape[1]):
+        iqr.append((param_quantiles[1, ii] - param_quantiles[0, ii]) / 100)
+
+    return iqr
+
+def median_absolute_deviation(param_value):
+    """
+    Using all the parameter values.
+    """
+    param_median = np.median(param_value, axis=0)
+    for ii in range(param_value.shape[1]):
+        param_value[:, ii] = np.abs(param_value[:, ii] - param_median[ii])
+    
+    mad = np.median(param_value) / 100
+    return mad
+
+def par_range(param_value):
+    """
+    Using all the parameter values.
+    """
+    param_range = (param_value.max(axis=0) - param_value.min(axis=0)) / 100 
+    return param_range
 
 # import the annual loads
-file_date = '20220118_full'
 file_dates = ['20220118_full', '20220123', '20220125', '20220126', '20220128', '20220129', '20220130', '20220201', '20220203', '20220204']
 fn_index = [26, 12, 24, 8, 12, 12, 8, 11, 9, 7]
 log_load = True
+par_columns = pd.read_csv('parameter_ensemble.csv', index_col = 'real_name').columns
+iqr_metrics_each_run = pd.DataFrame(index=np.arange(len(file_dates)), columns=par_columns)
+mad_metrics_each_run = pd.DataFrame(index=np.arange(len(file_dates)), columns=par_columns)
+range_metrics_each_run = pd.DataFrame(index=np.arange(len(file_dates)), columns=par_columns)
 
-for ii in range(len(file_dates)):
-    file_date = file_dates[ii]
-    fn_ind = fn_index[ii]
+
+for run_id in range(len(file_dates)):
+    file_date = file_dates[run_id]
+    fn_ind = fn_index[run_id]
     fpath = f'../output/work_run_{file_date}/'
     fn = f'126001A.{fn_ind}.obs.csv'
     fn_pars = f'126001A.{fn_ind}.par.csv'
     fn_meas = '126001A.base.obs.csv'
-
     df = pd.read_csv(fpath + fn, index_col = 'real_name')
     df_pars = pd.read_csv(fpath + fn_pars, index_col = 'real_name')
-
-    # select results of which the pbias is with 15%
     df_meas = pd.read_csv(fpath + fn_meas, index_col = 'real_name')
     if log_load:
         df_meas.loc[:, 'din_2009':] = 10**(df_meas.loc[:, 'din_2009':])
@@ -199,24 +222,19 @@ for ii in range(len(file_dates)):
             data=np.array([*cr_vals_total.sum(axis=0), awi_total]).reshape(1, 3))
     metric_total.to_csv(fpath+'metric_total_unc.csv')
 
-##-----------------Check the residuals with weights------------------##
-# weight = np.array([0.1, 11.13, 11.13, 11.13, 11.13, 11.13, 11.13, 11.13, 11.13, 11.13])
-# weight2 = np.array([0.15, 0.03, 0.03, 0.03, 0.03, 0.03, 0.03, 0.03, 0.03, 0.03])
-# resd = (df_meas - df)
-# lsq = (resd.loc[:, 'din_pbias':'din_2017']*weight)**2
-# lsq.loc[:, 'din_2009':'din_2017'].sum(axis=1).mean()
-# lsq.sum(axis=1).mean()
-# lsq.sum(axis=1).std()
-# lsq.sum(axis=1).max()
-# lsq.sum(axis=1).min()
+    ##-------------------Calculate metrics using total uncertainty: Coverage Ratio----------------##
+    # Calculate the parameter changes
+    par_ranges = pd.read_csv('parameters.tpl', skiprows=1, index_col='parameter')
+    df_pars_convert = df_pars.copy(deep=True)
+    for par in par_ranges.index:
+        df_pars_convert[par] = (par_ranges.loc[par, 'upper'] - par_ranges.loc[par, 'lower']) * df_pars[par.lower()] / 100 + par_ranges.loc[par, 'lower']
+    
+    iqr_metrics_each_run.loc[run_id, :] = inter_qunatile_range(df_pars.values, [0.25, 0.75])
+    mad_metrics_each_run.loc[run_id, :] = median_absolute_deviation(df_pars.values)    
+    range_metrics_each_run.loc[run_id, :] = par_range(df_pars.values)
 
+iqr_metrics_each_run.to_csv('../output/figs/parameter_iqr.csv')
+mad_metrics_each_run.to_csv('../output/figs/parameter_mad.csv')
+range_metrics_each_run.to_csv('../output/figs/parameter_range.csv')
 
-# df_temp  = df_meas.copy(deep=True)
-# for i in range(9):
-#     df_temp.loc[:, cols[i+1]] = 10**(df_meas.loc[:, cols[i+1]])
-
-# for i in df_temp.index:
-#     df_meas.loc[i, 'din_pbias'] = spotpy.objectivefunctions.pbias(10**(obs_df.iloc[0:9, :].values.flatten()), df_temp.loc[i, 'din_2009':'din_2017'].values)
-
-# df_meas.to_csv('measurement_ensemble_log.csv')
 

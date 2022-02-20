@@ -144,6 +144,8 @@ log_load = True
 par_columns = pd.read_csv('parameter_ensemble.csv', index_col = 'real_name').columns
 iqr_metrics_each_run = pd.DataFrame(index=np.arange(len(file_dates)), columns=par_columns)
 mad_metrics_each_run = pd.DataFrame(index=np.arange(len(file_dates)), columns=par_columns)
+quantile25_metrics_each_run = pd.DataFrame(index=np.arange(len(file_dates)), columns=par_columns)
+quantile75_metrics_each_run = pd.DataFrame(index=np.arange(len(file_dates)), columns=par_columns)
 range_metrics_each_run = pd.DataFrame(index=np.arange(len(file_dates)), columns=par_columns)
 
 
@@ -186,7 +188,7 @@ for run_id in range(len(file_dates)):
     metric = pd.DataFrame(index=np.arange(1), \
         columns=['Coverage ratio', 'Uncertainty overlap', 'Width index'], \
             data=np.array([*cr_vals.sum(axis=0), awi]).reshape(1, 3))
-    metric.to_csv(fpath+'metric_param_unc.csv')
+    # metric.to_csv(fpath+'metric_param_unc.csv')
 
     ##-------------------Calculate metrics using pars uncertainty: Objective functions----------------##
     objfunc_results = np.zeros(shape=(df.shape[0], 3))
@@ -194,14 +196,14 @@ for run_id in range(len(file_dates)):
     for ii in range(len(obj_funcs)):
         objfunc_results[:, ii] = obj_funcs[ii](df_meas.values, df.values)
     objfunc_results_df = pd.DataFrame(objfunc_results, index=np.arange(df.shape[0]), columns = ['NSE', 'PBIAS', 'R2'])
-    objfunc_results_df.to_csv(fpath+'objective_functions.csv')
+    # objfunc_results_df.to_csv(fpath+'objective_functions.csv')
 
     ##-------------------Calculate metrics using meas uncertainty: Predictive uncertainty----------------##
     obs_ensemble = measure_uncertainty(obs_df.values[:-1].flatten(), np.round(1/11.13, 2), nsample=10000)
     total_uncertainty = pred_uncertainty(obs_ensemble, df.loc[:, cols[1:-1]].values)
     total_df = pd.DataFrame(data=total_uncertainty, index=np.arange(total_uncertainty.shape[0]), columns = cols[1:-1])
     total_df.index.name = 'real_name'
-    total_df.to_csv(fpath+'total_uncertainty.csv')
+    # total_df.to_csv(fpath+'total_uncertainty.csv')
 
     ##-------------------Calculate metrics using total uncertainty: Coverage Ratio----------------##
     awi_total = average_width(np.array(obs_annual)[:-1], total_uncertainty, \
@@ -220,7 +222,7 @@ for run_id in range(len(file_dates)):
     metric_total = pd.DataFrame(index=np.arange(1), \
         columns=['Coverage ratio', 'Uncertainty overlap', 'Width index'], \
             data=np.array([*cr_vals_total.sum(axis=0), awi_total]).reshape(1, 3))
-    metric_total.to_csv(fpath+'metric_total_unc.csv')
+    # metric_total.to_csv(fpath+'metric_total_unc.csv')
 
     ##-------------------Calculate metrics using total uncertainty: Coverage Ratio----------------##
     # Calculate the parameter changes
@@ -232,9 +234,13 @@ for run_id in range(len(file_dates)):
     iqr_metrics_each_run.loc[run_id, :] = inter_qunatile_range(df_pars.values, [0.25, 0.75])
     mad_metrics_each_run.loc[run_id, :] = median_absolute_deviation(df_pars.values)    
     range_metrics_each_run.loc[run_id, :] = par_range(df_pars.values)
+    quantile25_metrics_each_run.loc[run_id, :] = df_pars.quantile(0.25).values
+    quantile75_metrics_each_run.loc[run_id, :] = df_pars.quantile(0.75).values
 
-iqr_metrics_each_run.to_csv('../output/figs/parameter_iqr.csv')
-mad_metrics_each_run.to_csv('../output/figs/parameter_mad.csv')
-range_metrics_each_run.to_csv('../output/figs/parameter_range.csv')
+# iqr_metrics_each_run.to_csv('../output/figs/parameter_iqr_normalize.csv')
+# mad_metrics_each_run.to_csv('../output/figs/parameter_mad.csv')
+# range_metrics_each_run.to_csv('../output/figs/parameter_range_normalize.csv')
+quantile25_metrics_each_run.to_csv('../output/figs/parameter_quantile25.csv')
+quantile75_metrics_each_run.to_csv('../output/figs/parameter_quantile75.csv')
 
 

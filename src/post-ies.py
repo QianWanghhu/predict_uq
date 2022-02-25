@@ -1,5 +1,6 @@
 #! usr/bin/env python
 from copy import deepcopy
+from matplotlib.pyplot import axis
 import numpy as np
 from numpy.lib import quantile
 import pandas as pd
@@ -137,9 +138,32 @@ def par_range(param_value):
     param_range = (param_value.max(axis=0) - param_value.min(axis=0)) / 100 
     return param_range
 
+def direction_change_pars(par_df_pre, par_df_fix, pars_fixed):
+    """
+    Calculate the direction of parameters variation when fixing a parameter.
+    Parameters:
+    ===========
+    par_df_pre: pd.DataFrame, of parameter estimates for the previous iteration.
+    par_df_fix: pd.DataFrame, of parameter estimates for the current iteration.
+    Return:
+    ===========
+    direction_df, pd.DataFrame, values indcate the direction that a parameter moves towards.
+    """
+    index_com = [ii for ii in par_df_pre.index if ii in par_df_fix.index]
+    delta_pars = (par_df_fix.loc[index_com, :] - par_df_pre.loc[index_com, :]).values
+    delta_direction = np.where(delta_pars>0, 1, 0)
+    direction_df = pd.DataFrame(index = index_com, columns = par_df_fix.columns, data=delta_direction)
+    direction_df[pars_fixed] = 0
+    direction_df['total'] = direction_df.sum(axis=1)
+    direction_df[pars_fixed] = (par_df_fix.loc[index_com, pars_fixed] - par_df_pre.loc[index_com, pars_fixed]).values
+    return direction_df
+    
+
 # import the annual loads
 file_dates = ['20220118_full', '20220123', '20220125', '20220126', '20220128', '20220129', '20220130', '20220201', '20220203', '20220204']
 fn_index = [26, 12, 24, 8, 12, 12, 8, 11, 9, 7]
+pars_fix = ['odwc', 'gfdwc', 'drp', 'cdwc', ['godwc', 'fdwc'], 
+    ['gfemc', 'dwc'], 'oemc', 'cemc', ['drf', 'femc']]
 log_load = True
 par_columns = pd.read_csv('parameter_ensemble.csv', index_col = 'real_name').columns
 iqr_metrics_each_run = pd.DataFrame(index=np.arange(len(file_dates)), columns=par_columns)
@@ -150,6 +174,7 @@ range_metrics_each_run = pd.DataFrame(index=np.arange(len(file_dates)), columns=
 
 
 for run_id in range(len(file_dates)):
+    print(f"---------------Read data for run_id: {run_id}---------------------")
     file_date = file_dates[run_id]
     fn_ind = fn_index[run_id]
     fpath = f'../output/work_run_{file_date}/'
@@ -176,6 +201,7 @@ for run_id in range(len(file_dates)):
         quantile_bool=True, quantiles = quantiles)
 
     ##-------------------Calculate metrics using pars uncertainty: Coverage Ratio----------------##
+    print("---------------------Calculate metrics using pars uncertainty: Coverage Ratio---------------------")
     cr_vals = np.zeros(shape=(9, 2))
     cols = df_meas.columns
     for i in range(9):
@@ -191,6 +217,7 @@ for run_id in range(len(file_dates)):
     # metric.to_csv(fpath+'metric_param_unc.csv')
 
     ##-------------------Calculate metrics using pars uncertainty: Objective functions----------------##
+    print("---------------------Calculate metrics using pars uncertainty: Objective functions---------------------")
     objfunc_results = np.zeros(shape=(df.shape[0], 3))
     obj_funcs = [nse_cal, pbias_cal, r2_cal]
     for ii in range(len(obj_funcs)):
@@ -198,7 +225,8 @@ for run_id in range(len(file_dates)):
     objfunc_results_df = pd.DataFrame(objfunc_results, index=np.arange(df.shape[0]), columns = ['NSE', 'PBIAS', 'R2'])
     # objfunc_results_df.to_csv(fpath+'objective_functions.csv')
 
-    ##-------------------Calculate metrics using meas uncertainty: Predictive uncertainty----------------##
+    ##-------------------Calculate total uncertainty: Predictive uncertainty----------------##
+    print("---------------------Calculate total uncertainty---------------------")
     obs_ensemble = measure_uncertainty(obs_df.values[:-1].flatten(), np.round(1/11.13, 2), nsample=10000)
     total_uncertainty = pred_uncertainty(obs_ensemble, df.loc[:, cols[1:-1]].values)
     total_df = pd.DataFrame(data=total_uncertainty, index=np.arange(total_uncertainty.shape[0]), columns = cols[1:-1])
@@ -210,6 +238,7 @@ for run_id in range(len(file_dates)):
         quantile_bool=True, quantiles = quantiles)
 
     ##-------------------Calculate metrics using total uncertainty: Coverage Ratio----------------##
+    print("---------------------Calculate metrics using total uncertainty: Coverage Ratio---------------------")
     cr_vals_total = np.zeros(shape=(9, 2))
     cols = total_df.columns
     for i in range(9):
@@ -226,21 +255,28 @@ for run_id in range(len(file_dates)):
 
     ##-------------------Calculate metrics using total uncertainty: Coverage Ratio----------------##
     # Calculate the parameter changes
+    print(f"---------------------Calculate the parameter changes---------------------")
     par_ranges = pd.read_csv('parameters.tpl', skiprows=1, index_col='parameter')
     df_pars_convert = df_pars.copy(deep=True)
     for par in par_ranges.index:
-        df_pars_convert[par] = (par_ranges.loc[par, 'upper'] - par_ranges.loc[par, 'lower']) * df_pars[par.lower()] / 100 + par_ranges.loc[par, 'lower']
+        df_pars_convert[par.lower()] = (par_ranges.loc[par, 'upper'] - par_ranges.loc[par, 'lower']) * df_pars[par.lower()] / 100 + par_ranges.loc[par, 'lower']
     
     iqr_metrics_each_run.loc[run_id, :] = inter_qunatile_range(df_pars.values, [0.25, 0.75])
     mad_metrics_each_run.loc[run_id, :] = median_absolute_deviation(df_pars.values)    
     range_metrics_each_run.loc[run_id, :] = par_range(df_pars.values)
-    quantile25_metrics_each_run.loc[run_id, :] = df_pars.quantile(0.25).values
-    quantile75_metrics_each_run.loc[run_id, :] = df_pars.quantile(0.75).values
+    quantile25_metrics_each_run.loc[run_id, :] = df_pars_convert.quantile(0.25).values
+    quantile75_metrics_each_run.loc[run_id, :] = df_pars_convert.quantile(0.75).values
+
+    ##---------------Calculate the direction of parameters changing--------------------##
+    if run_id > 0:
+        print(f"---------------------Calculate the direction of parameters changing---------------------")
+        direction_df = direction_change_pars(df_pars_convert_pre, df_pars_convert, pars_fix[run_id-1])
+        direction_df.to_csv(fpath+'parameter_direction.csv')
+
+    df_pars_convert_pre = df_pars_convert
 
 # iqr_metrics_each_run.to_csv('../output/figs/parameter_iqr_normalize.csv')
 # mad_metrics_each_run.to_csv('../output/figs/parameter_mad.csv')
 # range_metrics_each_run.to_csv('../output/figs/parameter_range_normalize.csv')
-quantile25_metrics_each_run.to_csv('../output/figs/parameter_quantile25.csv')
-quantile75_metrics_each_run.to_csv('../output/figs/parameter_quantile75.csv')
-
-
+# quantile25_metrics_each_run.to_csv('../output/figs/parameter_quantile25.csv')
+# quantile75_metrics_each_run.to_csv('../output/figs/parameter_quantile75.csv')

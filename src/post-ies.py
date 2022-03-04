@@ -214,7 +214,7 @@ for run_id in range(len(file_dates)):
     metric = pd.DataFrame(index=np.arange(1), \
         columns=['Coverage ratio', 'Uncertainty overlap', 'Width index'], \
             data=np.array([*cr_vals.sum(axis=0), awi]).reshape(1, 3))
-    # metric.to_csv(fpath+'metric_param_unc.csv')
+    metric.to_csv(fpath+'metric_param_unc.csv')
 
     ##-------------------Calculate metrics using pars uncertainty: Objective functions----------------##
     print("---------------------Calculate metrics using pars uncertainty: Objective functions---------------------")
@@ -223,7 +223,7 @@ for run_id in range(len(file_dates)):
     for ii in range(len(obj_funcs)):
         objfunc_results[:, ii] = obj_funcs[ii](df_meas.values, df.values)
     objfunc_results_df = pd.DataFrame(objfunc_results, index=np.arange(df.shape[0]), columns = ['NSE', 'PBIAS', 'R2'])
-    # objfunc_results_df.to_csv(fpath+'objective_functions.csv')
+    objfunc_results_df.to_csv(fpath+'objective_functions—q80.csv')
 
     ##-------------------Calculate total uncertainty: Predictive uncertainty----------------##
     print("---------------------Calculate total uncertainty---------------------")
@@ -231,7 +231,7 @@ for run_id in range(len(file_dates)):
     total_uncertainty = pred_uncertainty(obs_ensemble, df.loc[:, cols[1:-1]].values)
     total_df = pd.DataFrame(data=total_uncertainty, index=np.arange(total_uncertainty.shape[0]), columns = cols[1:-1])
     total_df.index.name = 'real_name'
-    # total_df.to_csv(fpath+'total_uncertainty.csv')
+    total_df.to_csv(fpath+'total_uncertainty.csv')
 
     ##-------------------Calculate metrics using total uncertainty: Coverage Ratio----------------##
     awi_total = average_width(np.array(obs_annual)[:-1], total_uncertainty, \
@@ -251,7 +251,7 @@ for run_id in range(len(file_dates)):
     metric_total = pd.DataFrame(index=np.arange(1), \
         columns=['Coverage ratio', 'Uncertainty overlap', 'Width index'], \
             data=np.array([*cr_vals_total.sum(axis=0), awi_total]).reshape(1, 3))
-    # metric_total.to_csv(fpath+'metric_total_unc.csv')
+    metric_total.to_csv(fpath+'metric_total_unc.csv')
 
     ##-------------------Calculate metrics using total uncertainty: Coverage Ratio----------------##
     # Calculate the parameter changes

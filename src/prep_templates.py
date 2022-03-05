@@ -95,15 +95,40 @@ def calculate_obs_objetive(monitor, obs_ensemble_ies, obs_ensemble):
     
     obs_ensemble_ies.insert(0, 'DIN_pbias', objective_values)
     return obs_ensemble_ies
-# write the observation section
-obsnme, df = process_monitor(datapath)
 
-# write the corresponding out instruction file for PEST
-write_instruction('output_0918.ins', obsnme)
 
-# write observation ensemble for ies
-ies_obs_name = 'observation_ensemble_0918.csv'
-obs_ensemble_ies, obs_ensemble = observation_ensemble(datapath, ies_obs_name)
+# prepare the observation realizations for ensemble members
+def log_norm_bias(fpath, fn_meas, log_load):
+    import spotpy
+    obs_annual = [52.093, 99.478, 44.064, 57.936, 53.449, 21.858, 38.561, 51.843, 14.176]
+    obs_annual.append(np.round(np.mean(obs_annual), 2))
+    obs_df = pd.DataFrame(data=np.log10(obs_annual), index = [*np.arange(2009, 2018), 'average'], columns=['Annual loads'])
 
-obs_ensemble_ies = calculate_obs_objetive(df, obs_ensemble_ies, obs_ensemble)
-obs_ensemble_ies.to_csv(ies_obs_name)
+
+    df_meas = pd.read_csv(fpath + fn_meas, index_col = 'real_name')
+
+    df_temp  = df_meas.copy(deep=True)
+    cols = df_meas.columns
+    for i in range(9):
+        df_temp.loc[:, cols[i+1]] = 10**(df_meas.loc[:, cols[i+1]])
+
+    for i in df_temp.index:
+        df_meas.loc[i, 'din_pbias'] = spotpy.objectivefunctions.pbias(10**(obs_df.iloc[0:9, :].values.flatten()), df_temp.loc[i, 'din_2009':'din_2017'].values)
+
+    df_meas.to_csv(f'{fpath}{fn_meas[:-4]}_corrected_bias.csv')
+
+
+if __name__ == '__main__':
+    # write the observation section
+    # obsnme, df = process_monitor(datapath)
+
+    # # write the corresponding out instruction file for PEST
+    # write_instruction('output_0918.ins', obsnme)
+
+    # # write observation ensemble for ies
+    # ies_obs_name = 'observation_ensemble_0918.csv'
+    # obs_ensemble_ies, obs_ensemble = observation_ensemble(datapath, ies_obs_name)
+
+    # obs_ensemble_ies = calculate_obs_objetive(df, obs_ensemble_ies, obs_ensemble)
+    # obs_ensemble_ies.to_csv(ies_obs_name)
+    log_norm_bias(fpath='../data/', fn_meas='meas_realization_1000_ensemble.csv', log_load=True)

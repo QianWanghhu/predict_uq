@@ -61,6 +61,29 @@ def average_width(x_obs, x_pred_all, quantile_bool=True, quantiles = None):
     awi = np.mean(x_pred_max - x_pred_min) / obs_sigma
 
     return awi
+
+def median_absolute_deviation(x_obs, x_pred_all):
+    """
+    This calculates the median absolute deviation of predictive uncertainty. Using the data of all years.
+    """
+    abs_deviation = np.zeros_like(x_pred_all)
+    pred_median = np.median(x_pred_all, axis=0)
+    for ii in range(x_pred_all.shape[1]):
+        abs_deviation[:, ii] = np.abs(x_pred_all[:, ii] - pred_median[ii])
+    
+    obs_sigma = x_obs.std()
+    mad = (np.median(abs_deviation, axis=0)).mean()
+    mad = mad / obs_sigma
+    return mad
+
+def std_unc(x_obs, x_pred_all):
+    """
+    This calculates the 95% CIs of predictive uncertainty. Using the data of all years.
+    """
+    x_std = x_pred_all.std(axis=0)
+    x_95ci = (3.92 * x_std.mean()) / x_obs.std()
+
+    return x_95ci
     
 
 def nse_cal(x_obs, x_pred):
@@ -120,16 +143,6 @@ def inter_qunatile_range(param_value, quantiles):
 
     return iqr
 
-def median_absolute_deviation(param_value):
-    """
-    Using all the parameter values.
-    """
-    param_median = np.median(param_value, axis=0)
-    for ii in range(param_value.shape[1]):
-        param_value[:, ii] = np.abs(param_value[:, ii] - param_median[ii])
-    
-    mad = np.median(param_value) / 100
-    return mad
 
 def par_range(param_value):
     """
@@ -164,10 +177,13 @@ file_dates = ['20220118_full', '20220123', '20220125', '20220126', '20220128', '
 fn_index = [26, 12, 24, 8, 12, 12, 8, 11, 9, 7]
 pars_fix = ['odwc', 'gfdwc', 'drp', 'cdwc', ['godwc', 'fdwc'], 
     ['gfemc', 'dwc'], 'oemc', 'cemc', ['drf', 'femc']]
+
+# file_dates = ['20220118_full', '20220123', '20220307', '20220308', '20220309']#, '20220126', '20220128', '20220129', '20220130', '20220201', '20220203', '20220204']
+# fn_index = [26, 12, 20, 6, 16]#, 8, 12, 12, 8, 11, 9, 7]
+# pars_fix = ['odwc', 'drp', 'godwc', 'gfdwc', '']# ['godwc', 'fdwc'], ['gfemc', 'dwc'], 'oemc', 'cemc', ['drf', 'femc']]
 log_load = True
 par_columns = pd.read_csv('parameter_ensemble.csv', index_col = 'real_name').columns
 iqr_metrics_each_run = pd.DataFrame(index=np.arange(len(file_dates)), columns=par_columns)
-mad_metrics_each_run = pd.DataFrame(index=np.arange(len(file_dates)), columns=par_columns)
 quantile25_metrics_each_run = pd.DataFrame(index=np.arange(len(file_dates)), columns=par_columns)
 quantile75_metrics_each_run = pd.DataFrame(index=np.arange(len(file_dates)), columns=par_columns)
 range_metrics_each_run = pd.DataFrame(index=np.arange(len(file_dates)), columns=par_columns)
@@ -193,12 +209,17 @@ for run_id in range(len(file_dates)):
     # obs data
     obs_annual = [52.093, 99.478, 44.064, 57.936, 53.449, 21.858, 38.561, 51.843, 14.176]
     obs_annual.append(np.round(np.mean(obs_annual), 2))
-    obs_df = pd.DataFrame(data=np.log10(obs_annual), index = [*np.arange(2009, 2018), 'average'], columns=['Annual loads'])
+    obs_df = pd.DataFrame(data=np.log10(obs_annual), 
+        index = [*np.arange(2009, 2018), 'average'], columns=['Annual loads'])
 
     ##-------------------Calculate metrics using pars uncertainty: Average width----------------##
     quantiles = [0.025, 0.975]
     awi = average_width(np.array(obs_annual)[:-1], df.values[:, 1:10], \
         quantile_bool=True, quantiles = quantiles)
+
+    ##-------------------Calculate metrics using pars uncertainty: MAD and 95%CIs from std----------------##
+    mad = median_absolute_deviation(np.array(obs_annual)[:-1], df.values[:, 1:10])
+    std_ci = std_unc(np.array(obs_annual)[:-1], df.values[:, 1:10])
 
     ##-------------------Calculate metrics using pars uncertainty: Coverage Ratio----------------##
     print("---------------------Calculate metrics using pars uncertainty: Coverage Ratio---------------------")
@@ -212,8 +233,8 @@ for run_id in range(len(file_dates)):
             quantile_bool=True, quantiles = quantiles, raw_cr=False)
 
     metric = pd.DataFrame(index=np.arange(1), \
-        columns=['Coverage ratio', 'Uncertainty overlap', 'Width index'], \
-            data=np.array([*cr_vals.sum(axis=0), awi]).reshape(1, 3))
+        columns=['Coverage ratio', 'Uncertainty overlap', 'Width index', 'Median absolute deviation', 'CI with std'], \
+            data=np.array([*cr_vals.sum(axis=0), awi, mad, std_ci]).reshape(1, 5))
     metric.to_csv(fpath+'metric_param_unc.csv')
 
     ##-------------------Calculate metrics using pars uncertainty: Objective functions----------------##
@@ -223,7 +244,7 @@ for run_id in range(len(file_dates)):
     for ii in range(len(obj_funcs)):
         objfunc_results[:, ii] = obj_funcs[ii](df_meas.values, df.values)
     objfunc_results_df = pd.DataFrame(objfunc_results, index=np.arange(df.shape[0]), columns = ['NSE', 'PBIAS', 'R2'])
-    objfunc_results_df.to_csv(fpath+'objective_functions—q80.csv')
+    objfunc_results_df.to_csv(fpath+'objective_functions.csv')
 
     ##-------------------Calculate total uncertainty: Predictive uncertainty----------------##
     print("---------------------Calculate total uncertainty---------------------")
@@ -236,6 +257,10 @@ for run_id in range(len(file_dates)):
     ##-------------------Calculate metrics using total uncertainty: Coverage Ratio----------------##
     awi_total = average_width(np.array(obs_annual)[:-1], total_uncertainty, \
         quantile_bool=True, quantiles = quantiles)
+    
+    ##-------------------Calculate metrics using pars uncertainty: MAD and 95%CIs from std----------------##
+    mad_total = median_absolute_deviation(np.array(obs_annual)[:-1], total_uncertainty)
+    std_ci_total = std_unc(np.array(obs_annual)[:-1], total_uncertainty)
 
     ##-------------------Calculate metrics using total uncertainty: Coverage Ratio----------------##
     print("---------------------Calculate metrics using total uncertainty: Coverage Ratio---------------------")
@@ -249,8 +274,8 @@ for run_id in range(len(file_dates)):
             quantile_bool=True, quantiles = quantiles, raw_cr=False)
 
     metric_total = pd.DataFrame(index=np.arange(1), \
-        columns=['Coverage ratio', 'Uncertainty overlap', 'Width index'], \
-            data=np.array([*cr_vals_total.sum(axis=0), awi_total]).reshape(1, 3))
+        columns=['Coverage ratio', 'Uncertainty overlap', 'Width index', 'Median absolute deviation', 'CI with std'], \
+            data=np.array([*cr_vals_total.sum(axis=0), awi_total, mad_total, std_ci_total]).reshape(1, 5))
     metric_total.to_csv(fpath+'metric_total_unc.csv')
 
     ##-------------------Calculate metrics using total uncertainty: Coverage Ratio----------------##
@@ -261,8 +286,7 @@ for run_id in range(len(file_dates)):
     for par in par_ranges.index:
         df_pars_convert[par.lower()] = (par_ranges.loc[par, 'upper'] - par_ranges.loc[par, 'lower']) * df_pars[par.lower()] / 100 + par_ranges.loc[par, 'lower']
     
-    iqr_metrics_each_run.loc[run_id, :] = inter_qunatile_range(df_pars.values, [0.25, 0.75])
-    mad_metrics_each_run.loc[run_id, :] = median_absolute_deviation(df_pars.values)    
+    iqr_metrics_each_run.loc[run_id, :] = inter_qunatile_range(df_pars.values, [0.25, 0.75]) 
     range_metrics_each_run.loc[run_id, :] = par_range(df_pars.values)
     quantile25_metrics_each_run.loc[run_id, :] = df_pars_convert.quantile(0.25).values
     quantile75_metrics_each_run.loc[run_id, :] = df_pars_convert.quantile(0.75).values
@@ -274,9 +298,8 @@ for run_id in range(len(file_dates)):
         direction_df.to_csv(fpath+'parameter_direction.csv')
 
     df_pars_convert_pre = df_pars_convert
-
-# iqr_metrics_each_run.to_csv('../output/figs/parameter_iqr_normalize.csv')
-# mad_metrics_each_run.to_csv('../output/figs/parameter_mad.csv')
-# range_metrics_each_run.to_csv('../output/figs/parameter_range_normalize.csv')
-# quantile25_metrics_each_run.to_csv('../output/figs/parameter_quantile25.csv')
-# quantile75_metrics_each_run.to_csv('../output/figs/parameter_quantile75.csv')
+fp_fig = '../output/figs/'
+iqr_metrics_each_run.to_csv(f'{fp_fig}parameter_iqr.csv')
+range_metrics_each_run.to_csv(f'{fp_fig}parameter_range.csv')
+quantile25_metrics_each_run.to_csv(f'{fp_fig}parameter_quantile25.csv')
+quantile75_metrics_each_run.to_csv(f'{fp_fig}parameter_quantile75.csv')

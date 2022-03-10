@@ -81,7 +81,7 @@ def std_unc(x_obs, x_pred_all):
     This calculates the 95% CIs of predictive uncertainty. Using the data of all years.
     """
     x_std = x_pred_all.std(axis=0)
-    x_95ci = (3.92 * x_std.mean()) / x_obs.std()
+    x_95ci = (4 * x_std.mean()) / x_obs.std()
 
     return x_95ci
     
@@ -179,8 +179,8 @@ pars_fix = ['odwc', 'gfdwc', 'drp', 'cdwc', ['godwc', 'fdwc'],
     ['gfemc', 'dwc'], 'oemc', 'cemc', ['drf', 'femc']]
 
 # file_dates = ['20220118_full', '20220123', '20220307', '20220308', '20220309']#, '20220126', '20220128', '20220129', '20220130', '20220201', '20220203', '20220204']
-# fn_index = [26, 12, 20, 6, 16]#, 8, 12, 12, 8, 11, 9, 7]
-# pars_fix = ['odwc', 'drp', 'godwc', 'gfdwc', '']# ['godwc', 'fdwc'], ['gfemc', 'dwc'], 'oemc', 'cemc', ['drf', 'femc']]
+# fn_index = [26, 12, 20, 6, 22]#, 8, 12, 12, 8, 11, 9, 7]
+# pars_fix = ['odwc', 'drp', 'godwc', 'gfdwc']# ['godwc', 'fdwc'], ['gfemc', 'dwc'], 'oemc', 'cemc', ['drf', 'femc']]
 log_load = True
 par_columns = pd.read_csv('parameter_ensemble.csv', index_col = 'real_name').columns
 iqr_metrics_each_run = pd.DataFrame(index=np.arange(len(file_dates)), columns=par_columns)

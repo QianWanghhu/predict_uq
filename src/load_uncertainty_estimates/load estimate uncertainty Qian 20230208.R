@@ -458,7 +458,7 @@ dinmixlow <- samplefreqfun(flowdf = flow, concdf = dinraw, seconds = yearlysecon
                                       randomseeds = 10, randomtimes = 2, flowunc = flowunclow,
                                       concunc = noxunclow, covar = 0.1, boundtype = "lower")
 
-write.csv(dinmixlow, 'output/dinmixlow_nocovar_100.csv')
+write.csv(dinmixlow, 'output/resample_freq100_new_assumption/dinmixlow_nocovar_100.csv')
 
 # dinmixlowcovar <- samplefreqfun(flowdf = flow, concdf = dinraw, seconds = yearlyseconds, minconc = MinDIN,
 #                                            loadfun = "linear",  biasfun = 1, randomfun = "randomyear", randomseedprop = 0.7,
@@ -472,7 +472,7 @@ dinmixup <- samplefreqfun(flowdf = flow, concdf = dinraw, seconds = yearlysecond
                            randomseeds = 10, randomtimes = 2, flowunc = flowuncup,
                            concunc = noxuncup, covar = 0.1, boundtype = "upper")
 
-write.csv(dinmixup, 'output/dinmixup_nocovar_100.csv')
+write.csv(dinmixup, 'output/resample_freq100_new_assumption/dinmixup_nocovar_100.csv')
 
 # dinmixupcovar <- samplefreqfun(flowdf = flow, concdf = dinraw, seconds = yearlyseconds, minconc = MinDIN,
 #                                 loadfun = "linear",  biasfun = 1, randomfun = "randomyear", randomseedprop = 0.7,
